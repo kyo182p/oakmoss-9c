@@ -1,0 +1,3092 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>雲林排班工具</title>
+<style>
+:root{
+  --ground:#E9EDEE; --surface:#FCFDFD; --sunk:#DFE5E7;
+  --ink:#101B20; --ink-2:#41565F; --ink-3:#6D8189;
+  --rule:#C8D3D6; --rule-2:#DDE4E6;
+  --navy:#123B54; --navy-soft:#DEE9EE;
+  --buoy:#B24E19; --buoy-soft:#F7E7DC;
+  --ok:#2C6549; --ok-soft:#DFEDE6;
+  --warn:#8A5A05; --warn-soft:#F6EBD7;
+  --stop:#9C3524; --stop-soft:#F7E3DE;
+  --night:#3B4E8A; --night-soft:#E2E6F4;
+}
+@media (prefers-color-scheme:dark){:root{
+  --ground:#08110F; --surface:#0F1A1E; --sunk:#141F24;
+  --ink:#DCE6E9; --ink-2:#95A9B1; --ink-3:#74888F;
+  --rule:#22333A; --rule-2:#1A272D;
+  --navy:#68AECB; --navy-soft:#102B37;
+  --buoy:#E58A52; --buoy-soft:#2B1911;
+  --ok:#5FBE96; --ok-soft:#0F2820;
+  --warn:#DFA754; --warn-soft:#2A2011;
+  --stop:#EC8571; --stop-soft:#2E1611;
+  --night:#93A6E0; --night-soft:#161B2E;
+}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font-size:14.5px;line-height:1.7;
+  font-family:-apple-system,"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif}
+button{font:inherit;cursor:pointer}
+h2{font-size:17px;margin:0 0 10px}
+h3{font-size:14px;margin:0 0 8px;color:var(--ink-2)}
+.hide{display:none!important}
+input,textarea,select{font:inherit;color:var(--ink);background:var(--surface);
+  border:1px solid var(--rule);border-radius:3px;padding:5px 8px}
+input:focus-visible,textarea:focus-visible,button:focus-visible{
+  outline:2px solid var(--navy);outline-offset:1px}
+
+/* ---------- 開場 ---------- */
+.start{max-width:660px;margin:0 auto;padding:56px 22px}
+.start h1{font-size:30px;margin:0 0 10px;letter-spacing:-.01em}
+.start p{color:var(--ink-2);margin:0 0 22px;max-width:56ch}
+.drop{border:2px dashed var(--rule);border-radius:6px;background:var(--surface);
+  padding:38px 26px;text-align:center;transition:border-color .15s,background .15s}
+.drop.over{border-color:var(--buoy);background:var(--buoy-soft)}
+.drop .big{font-size:17px;font-weight:700;margin-bottom:6px}
+.drop .sm{font-size:13px;color:var(--ink-3);margin-bottom:16px}
+.filerow{display:flex;gap:10px;align-items:center;font-size:13.5px;padding:5px 0}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--rule);flex:none}
+.dot.on{background:var(--ok)}
+.progress{margin-top:18px;font-size:13.5px;color:var(--ink-2);min-height:24px}
+.warnbox{background:var(--warn-soft);border-left:3px solid var(--warn);padding:11px 15px;
+  border-radius:3px;margin-top:18px;font-size:13.5px;color:var(--ink-2)}
+
+/* ---------- 主框架 ---------- */
+.top{position:sticky;top:0;z-index:40;background:var(--surface);
+  border-bottom:1px solid var(--rule);padding:9px 18px;
+  display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.brand{font-weight:700;font-size:15.5px;white-space:nowrap}
+.files{font-size:12px;color:var(--ink-3);line-height:1.5}
+.files b{color:var(--ink-2);font-weight:500}
+.spacer{flex:1}
+.datepick{display:flex;gap:6px;align-items:center}
+.nav{display:flex;gap:2px;padding:0 18px;background:var(--surface);
+  border-bottom:1px solid var(--rule);position:sticky;top:47px;z-index:39;flex-wrap:wrap}
+.nav button{background:none;border:none;border-bottom:2px solid transparent;
+  padding:9px 15px;color:var(--ink-2);font-size:14px}
+.nav button.on{color:var(--ink);border-bottom-color:var(--buoy);font-weight:700}
+.nav .badge{display:inline-block;margin-left:6px;font-size:11px;padding:0 6px;
+  border-radius:9px;background:var(--stop-soft);color:var(--stop);font-weight:700}
+.wrap{padding:18px;max-width:1400px;margin:0 auto}
+
+/* ---------- 搜尋式下拉 ---------- */
+.cb{position:relative;display:inline-block}
+.cb>input{width:100%;padding-right:22px}
+.cb>.arrow{position:absolute;right:7px;top:50%;transform:translateY(-50%);
+  color:var(--ink-3);font-size:10px;pointer-events:none}
+.cb .list{position:absolute;z-index:60;top:calc(100% + 2px);left:0;min-width:100%;
+  max-height:260px;overflow:auto;background:var(--surface);border:1px solid var(--rule);
+  border-radius:3px;box-shadow:0 8px 22px rgba(0,0,0,.16);padding:3px}
+.cb .opt{padding:5px 9px;border-radius:2px;font-size:13.5px;cursor:pointer;
+  display:flex;gap:8px;align-items:baseline;white-space:nowrap}
+.cb .opt:hover,.cb .opt.cur{background:var(--navy-soft)}
+.cb .opt .sub{color:var(--ink-3);font-size:11.5px;margin-left:auto;padding-left:12px}
+.cb .opt .lv{color:var(--ink-3);font-size:11px;border:1px solid var(--rule);
+  border-radius:2px;padding:0 4px}
+.cb .none{padding:7px 9px;color:var(--ink-3);font-size:13px}
+.cb .hd{padding:5px 9px 3px;color:var(--ink-3);font-size:11.5px;font-weight:700;
+  border-top:1px solid var(--rule-2);margin-top:3px}
+.cb .hd:first-child{border-top:none;margin-top:0}
+
+/* ---------- 統計 ---------- */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));
+  gap:1px;background:var(--rule);border:1px solid var(--rule);margin-bottom:16px}
+.stat{background:var(--surface);padding:11px 14px}
+.stat .v{font-size:23px;font-weight:700;line-height:1.1}
+.stat .l{font-size:11.5px;color:var(--ink-3);margin-top:3px}
+.stat.bad .v{color:var(--stop)} .stat.good .v{color:var(--ok)} .stat.hi .v{color:var(--buoy)}
+
+/* ---------- 隊伍卡 ---------- */
+.teams{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:11px}
+.team{background:var(--surface);border:1px solid var(--rule);border-radius:4px;
+  border-top:3px solid var(--navy);padding:11px 13px}
+.team.night{border-top-color:var(--night)}
+.team.painter{border-top-color:var(--ink-3);opacity:.9}
+.team.bad{border-color:var(--stop)}
+.team .th{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.team .tn{font-weight:700;font-size:15px}
+.team .tv{font-size:11.5px;color:var(--ink-3)}
+.tags{display:flex;gap:4px;flex-wrap:wrap;margin:5px 0 7px}
+.tag{font-size:11px;padding:0 7px;border-radius:2px;background:var(--sunk);color:var(--ink-2)}
+.tag.n{background:var(--night-soft);color:var(--night)}
+.tag.p{background:var(--buoy-soft);color:var(--buoy)}
+.tag.full{background:var(--stop-soft);color:var(--stop);font-weight:700}
+.tag.wt{background:var(--navy);color:var(--surface);font-weight:700;font-size:11.5px;padding:1px 9px}
+.tag.sup{background:var(--warn-soft);color:var(--warn)}
+.turbs{display:flex;gap:5px;flex-wrap:wrap;margin-top:8px;padding-top:7px;
+  border-top:1px dashed var(--rule)}
+.turbs .lbl{font-size:11px;color:var(--ink-3);align-self:center;margin-right:2px}
+.turb{font-size:11.5px;font-weight:700;letter-spacing:.02em;border:1px solid var(--rule);
+  background:var(--sunk);color:var(--ink-2);border-radius:3px;padding:1px 8px;cursor:pointer}
+.turb:hover{border-color:var(--navy);color:var(--navy)}
+.turb.on{background:var(--navy);border-color:var(--navy);color:var(--surface)}
+.turb .n{font-weight:400;opacity:.75;margin-left:4px}
+.faults{margin-top:7px;background:var(--sunk);border-radius:3px;padding:9px 12px;font-size:12.5px;
+  line-height:1.7;color:var(--ink-2)}
+.faults .fh{font-weight:700;color:var(--ink);margin-bottom:3px}
+.faults ul{margin:0;padding-left:17px}
+.faults li{margin-bottom:3px}
+.faults .meta{color:var(--ink-3);font-size:11px}
+.mem{display:flex;align-items:baseline;gap:6px;font-size:13.5px;padding:1px 0;flex-wrap:wrap}
+.mem .lv{font-size:10.5px;color:var(--ink-3);border:1px solid var(--rule);
+  border-radius:2px;padding:0 4px}
+.mem.struck .nm{text-decoration:line-through;color:var(--ink-3)}
+.mem.out .nm{color:var(--ink-3);font-style:italic}
+.mem.unmatched .nm{color:var(--buoy);border-bottom:1px dashed var(--buoy)}
+.cmt{margin-top:7px;padding-top:6px;border-top:1px dashed var(--rule);
+  font-size:12px;color:var(--ink-3)}
+
+/* ---------- 草稿列 ---------- */
+.slot{display:flex;gap:6px;align-items:center;margin-bottom:4px}
+.slot .cb{flex:1;min-width:0}
+.slot .why{font-size:11px;color:var(--ink-3);white-space:nowrap;max-width:96px;
+  overflow:hidden;text-overflow:ellipsis}
+.slot .why.auto{color:var(--ok)}
+.slot .rm{border:1px solid var(--rule);background:var(--surface);color:var(--ink-3);
+  border-radius:2px;font-size:11px;padding:2px 6px;flex:none}
+.slot.lead .cb>input{border-color:var(--navy)}
+.slotlbl{font-size:10.5px;color:var(--navy);border:1px solid var(--navy);border-radius:2px;
+  padding:0 4px;flex:none}
+.addrow{margin-top:5px}
+.addrow button{border:1px dashed var(--rule);background:none;color:var(--ink-2);
+  border-radius:3px;font-size:12.5px;padding:3px 10px;width:100%}
+.fixedmem{font-size:13px;color:var(--ink-3);font-style:italic;padding:2px 0}
+
+/* ---------- 問題 ---------- */
+.issue{background:var(--surface);border:1px solid var(--rule);border-left:3px solid var(--ink-3);
+  padding:11px 14px;margin-bottom:8px;border-radius:3px}
+.issue.stop{border-left-color:var(--stop)}
+.issue.warn{border-left-color:var(--warn)}
+.issue.info{border-left-color:var(--navy)}
+.issue .lvl{font-size:11px;font-weight:700;padding:0 7px;border-radius:2px;margin-right:8px}
+.issue.stop .lvl{background:var(--stop-soft);color:var(--stop)}
+.issue.warn .lvl{background:var(--warn-soft);color:var(--warn)}
+.issue.info .lvl{background:var(--navy-soft);color:var(--navy)}
+.issue .fix{font-size:12.5px;color:var(--ink-2);margin-top:4px}
+.issue .fix::before{content:"建議 · ";color:var(--ink-3)}
+.livebar{background:var(--surface);border:1px solid var(--rule);border-radius:4px;
+  padding:10px 14px;margin-bottom:12px;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.livebar .n{font-weight:700}
+.livebar .n.bad{color:var(--stop)} .livebar .n.ok{color:var(--ok)} .livebar .n.wr{color:var(--warn)}
+
+.cols{display:grid;grid-template-columns:1fr 330px;gap:14px;align-items:start}
+@media(max-width:1050px){.cols{grid-template-columns:1fr}}
+.side{background:var(--surface);border:1px solid var(--rule);border-radius:4px;padding:12px 14px;
+  position:sticky;top:96px;max-height:calc(100vh - 116px);overflow:auto}
+.grp{margin-bottom:12px}
+.grp .gh{font-size:12.5px;font-weight:700;color:var(--ink-2);display:flex;
+  justify-content:space-between;gap:6px;border-bottom:1px solid var(--rule-2);
+  padding-bottom:3px;margin-bottom:4px}
+.grp .gh .c{color:var(--ink-3);font-weight:400}
+.pl{font-size:13px;line-height:1.6;color:var(--ink-2)}
+.pl .p{display:inline-block;margin:1px 5px 1px 0;white-space:nowrap}
+.pl .p .lv{font-size:10px;color:var(--ink-3)}
+
+.act{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+.btn{background:var(--navy);color:var(--surface);border:none;border-radius:3px;
+  padding:8px 18px;font-size:14px;font-weight:500}
+.btn.ghost{background:none;border:1px solid var(--rule);color:var(--ink-2)}
+.btn.sm{padding:4px 11px;font-size:12.5px}
+.note{background:var(--buoy-soft);border-left:3px solid var(--buoy);padding:11px 14px;
+  border-radius:3px;margin-bottom:14px;font-size:13.5px}
+.saved{font-size:12.5px;color:var(--ok)}
+.err{background:var(--stop-soft);color:var(--stop);padding:12px 15px;border-radius:3px;
+  margin-bottom:14px}
+
+/* ---------- 設定 ---------- */
+.card{background:var(--surface);border:1px solid var(--rule);border-radius:4px;
+  padding:14px 16px;margin-bottom:12px}
+.card .hint{font-size:12.5px;color:var(--ink-3);margin:-4px 0 10px;max-width:76ch}
+.chk{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:2px 10px;
+  max-height:250px;overflow:auto;border:1px solid var(--rule-2);padding:8px;border-radius:3px}
+.chk label{display:flex;gap:6px;align-items:center;font-size:13px;padding:1px 0}
+.chk.wide{grid-template-columns:repeat(auto-fill,minmax(320px,1fr))}
+.chk.wide label>span:first-of-type{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chk.wide .tri{margin-left:auto;flex:none}
+.chk label .lv{font-size:10.5px;color:var(--ink-3)}
+.chk label .gp{font-size:10.5px;color:var(--ink-3);margin-left:auto}
+.tri{display:flex;gap:3px}
+.tri button{font-size:11.5px;padding:1px 7px;border:1px solid var(--rule);
+  background:var(--surface);color:var(--ink-3);border-radius:2px}
+.tri button.on{background:var(--navy);color:var(--surface);border-color:var(--navy)}
+.pairs{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px}
+.pairs .cb{min-width:220px}
+.pl-list{display:flex;gap:6px;flex-wrap:wrap}
+.pair{font-size:12.5px;background:var(--sunk);border-radius:12px;padding:2px 10px}
+.pair button{border:none;background:none;color:var(--stop);margin-left:5px;padding:0}
+.ordlist{border:1px solid var(--rule-2);border-radius:3px;max-height:230px;overflow:auto}
+.ordlist div{display:flex;align-items:center;gap:8px;padding:3px 9px;font-size:13px;
+  border-bottom:1px solid var(--rule-2)}
+.ordlist div:last-child{border-bottom:none}
+.ordlist .idx{color:var(--ink-3);font-size:11.5px;width:20px}
+.ordlist button{border:1px solid var(--rule);background:var(--surface);color:var(--ink-2);
+  border-radius:2px;font-size:11px;padding:0 6px;margin-left:auto}
+
+/* ---------- 留言 ---------- */
+/* ---------- 下兩輪 ---------- */
+.wk{margin-bottom:18px}
+.wk h3{font-size:15px;color:var(--ink);margin:0 0 8px;display:flex;gap:10px;align-items:baseline}
+.wk h3 .sub{font-size:12.5px;color:var(--ink-3);font-weight:400}
+.dayrow{display:grid;grid-template-columns:118px 1fr repeat(4,minmax(72px,88px)) 78px;
+  gap:8px;align-items:center;background:var(--surface);border:1px solid var(--rule);
+  border-radius:4px;padding:8px 12px;margin-bottom:5px;font-size:13.5px}
+.dayrow.head{background:var(--sunk);border-color:var(--rule);font-size:11.5px;
+  color:var(--ink-3);font-weight:700}
+.dayrow.bad{border-left:3px solid var(--stop)}
+.dayrow.warnrow{border-left:3px solid var(--warn)}
+.dayrow.okrow{border-left:3px solid var(--ok)}
+.dayrow .d{font-weight:700;font-variant-numeric:tabular-nums}
+.dayrow .d span{font-weight:400;color:var(--ink-3);margin-left:5px;font-size:12px}
+.dayrow .n{text-align:right;font-variant-numeric:tabular-nums}
+.dayrow .n.bad{color:var(--stop);font-weight:700}
+.dayrow .n.wr{color:var(--warn);font-weight:700}
+.dayrow .n.ok{color:var(--ok)}
+.dayrow .info{color:var(--ink-2);font-size:12.5px;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap}
+@media(max-width:900px){.dayrow{grid-template-columns:1fr 1fr;grid-auto-rows:auto}}
+
+.snap{background:var(--sunk);border-radius:3px;padding:10px 13px;font-size:12.5px;
+  color:var(--ink-2);line-height:1.8;margin:10px 0}
+.snap b{color:var(--ink)}
+.msglist{margin-top:12px}
+.msgitem{border:1px solid var(--rule);border-radius:4px;padding:11px 14px;margin-bottom:9px;
+  background:var(--surface)}
+.msgitem .mh{font-size:11.5px;color:var(--ink-3);display:flex;gap:10px;flex-wrap:wrap;
+  align-items:center;margin-bottom:5px}
+.msgitem .mb{white-space:pre-wrap;font-size:13.5px}
+.msgitem .mrm{border:none;background:none;color:var(--stop);font-size:11.5px;margin-left:auto}
+textarea.big{width:100%;min-height:110px;line-height:1.6}
+</style>
+</head>
+<body>
+
+<!-- ================= 開場 ================= -->
+<div id="start" class="start">
+  <h1>雲林排班工具</h1>
+  <p>把 <b>人力總表</b> 和 <b>每日出海計畫</b> 兩個 Excel 拖進來就可以開始。
+     檔案只在這台電腦的瀏覽器裡處理,<b>不會上傳到任何地方,也不會改到你的 Excel</b>。</p>
+  <div class="drop" id="drop">
+    <div class="big">把兩個 Excel 拖到這裡</div>
+    <div class="sm">或按下面的按鈕挑檔案(可以一次選兩個)</div>
+    <input type="file" id="picker" accept=".xlsx" multiple style="display:none">
+    <button class="btn" id="pickbtn">選擇檔案</button>
+    <div style="max-width:360px;margin:18px auto 0;text-align:left">
+      <div class="filerow"><span class="dot" id="d1"></span><span id="n1">人力總表　尚未選取</span></div>
+      <div class="filerow"><span class="dot" id="d2"></span><span id="n2">每日出海計畫　尚未選取</span></div>
+    </div>
+  </div>
+  <div class="progress" id="prog"></div>
+  <div class="warnbox hide" id="startwarn"></div>
+</div>
+
+<!-- ================= 主畫面 ================= -->
+<div id="app" class="hide">
+  <div class="top">
+    <span class="brand">雲林排班工具</span>
+    <span class="files" id="files"></span>
+    <span class="spacer"></span>
+    <span class="datepick">
+      <button class="btn ghost" id="prev">◀</button>
+      <span id="dateCb"></span>
+      <button class="btn ghost" id="next">▶</button>
+      <button class="btn ghost" id="swap">換總表</button>
+      <button class="btn ghost" id="reload">全部重來</button>
+    </span>
+  </div>
+
+  <div class="nav">
+    <button data-tab="overview" class="on">總覽</button>
+    <button data-tab="plan">排班</button>
+    <button data-tab="ahead">下兩輪<span class="badge hide" id="abadge">0</span></button>
+    <button data-tab="issues">檢核<span class="badge hide" id="ibadge">0</span></button>
+    <button data-tab="settings">設定</button>
+    <button data-tab="notes">留言</button>
+  </div>
+
+  <div class="wrap">
+    <div id="err" class="err hide"></div>
+
+    <div id="tab-overview">
+      <div class="stats" id="stats"></div>
+      <div class="act" style="margin-bottom:10px">
+        <span style="font-size:13px;color:var(--ink-3)">名單(1. 2. 3. 用檔案裡的本名+英文名)</span>
+        <button class="btn ghost sm" data-list="scheduled" data-box="#listbox1">班表已排的人</button>
+        <button class="btn ghost sm" data-list="available" data-box="#listbox1">總表可出海的人</button>
+      </div>
+      <textarea id="listbox1" class="big hide" readonly style="margin-bottom:14px;font-size:12.5px"></textarea>
+      <div id="wnote"></div>
+      <div class="teams" id="teams"></div>
+    </div>
+
+    <div id="tab-plan" class="hide">
+      <div class="act">
+        <button class="btn" id="gen">一鍵產生這一天的草稿</button>
+        <span style="font-size:13px;color:var(--ink-3)">基準日</span>
+        <span id="baseCb"></span>
+        <button class="btn ghost sm" id="dropdraft">丟掉這一天的草稿</button>
+        <button class="btn ghost sm" id="copyall">複製全部隊伍</button>
+        <button class="btn ghost sm" data-list="scheduled" data-box="#copybox">已排名單 1.2.3.</button>
+        <button class="btn ghost sm" data-list="available" data-box="#copybox">可出海名單 1.2.3.</button>
+        <button class="btn sm" id="exportplan">存成新的出海計畫(原檔格式)</button>
+        <button class="btn ghost sm" id="exportx">存成簡表</button>
+        <span class="saved hide" id="gmsg"></span>
+      </div>
+      <div id="livebar" class="livebar hide"></div>
+      <div id="returning"></div>
+      <div class="cols">
+        <div class="teams" id="dteams"></div>
+        <div class="side">
+          <h3>草稿的問題(改一個人就重算)</h3>
+          <div id="draftIssues" style="font-size:13px"></div>
+          <h3 style="margin-top:14px">不能排的人</h3>
+          <div class="pl" id="unsched"></div>
+        </div>
+      </div>
+      <textarea id="copybox" class="big hide" readonly style="margin-top:14px;font-size:12.5px"></textarea>
+    </div>
+
+    <div id="tab-ahead" class="hide">
+      <div class="act">
+        <button class="btn" id="exportAhead">所有草稿存成一個 Excel</button>
+        <button class="btn ghost sm" id="regenAhead">重新產生全部</button>
+        <span class="saved hide" id="amsg"></span>
+      </div>
+      <div id="aheadBody"></div>
+    </div>
+
+    <div id="tab-issues" class="hide">
+      <div class="note" style="background:var(--navy-soft);border-left-color:var(--navy)">
+        這裡看的是 <b>Excel 目前的內容</b>。草稿改過之後的結果會即時顯示在「排班」分頁右邊的<b>草稿的問題</b>。
+      </div>
+      <div id="issues"></div>
+    </div>
+
+    <div id="tab-settings" class="hide"><div id="settings"></div></div>
+    <div id="tab-notes" class="hide"><div id="notes"></div></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ==================================================================
+   雲林排班工具 —— 單一 HTML 檔,不需要安裝任何東西。
+   規則來源:AOC 問卷逐題確認 [T] / 從 Excel 實測驗證 [V] / 使用者回饋 [U]
+   ================================================================== */
+
+const R = {
+  OFFSHORE: ["TS","TSF","MT","MTF","CT","BT","HV","W","TSWA"],
+  SHORE: ["ST","SK","AOC","SM","SA","OM","HSE"],
+  /* [T] 2026-09-08 Tina 確認:整隊都是 CT、沒有 TS 或 MT 帶隊是「不 OK」的,
+     不分主力隊(Lugang、Xingang)或承攬商隊(Tako、PR、PE、P1),一律要提醒。
+     [V] 2026 年歷史資料有 184 次這種情形,三月最多(75 次)、八月只剩 8 次。
+     所以這些紅字是真的該補隊長,不是誤報 —— 不做任何豁免。
+     唯一的例外是 painter 隊(Snail 3 / Paint)和全 TSWA 的葉片組。 */
+  LEADER: ["TS","TSF","MT","MTF"],
+  /* [U] ST 主要在岸上規劃出海計畫,缺人手時才跟著出海(例:Graeme Bissett 9/8)。
+     所以:可以被排、排到就跟一般人一樣算進「班表已排」和隊伍人數;
+     但不會被自動補人挑到(要人自己選),而且沒被排到時也不算進「總表可出海」,
+     否則他每天都會變成一位「可出海卻沒排到的人」。
+     另外他不會被當成隊長。 */
+  SUPPORT: ["ST"],
+  /* [U] 同一個人有兩種身分時取比較高的那個。
+     [V] 實測班表和總表不一致 604 次,而且方向固定 ——
+     班表常常省略 F(MT vs MTF 140 次、TS vs TSF 144 次),
+     或寫低一階(BT vs CT 238 次、CT vs MT 64 次)。總表幾乎永遠是比較高的那個。
+     唯一例外是岸上職務(ST):總表寫 ST、班表寫 TS,這時要以總表的 ST 為準。 */
+  LEVEL_RANK: ["TSF","TS","MTF","MT","HV","CT","BT","TSWA","W"],
+  /* [T] HV 隊分兩種,分水嶺是「隊裡有沒有歐洲技師」(總表 Level = HV):
+       · 一般 HV 年保 —— TS、MT 帶隊就可以,不需要 F。
+       · HV 嚴重問題 —— 要請 Level 掛 HV 的歐洲技師,加上 TSF 或 MTF 隊長,
+         再搭一個 CT 或 BT 才能成隊。
+     [V] 2026 年 224 個 HV 隊照這條切開後:
+       · 有歐洲技師 132 隊 → 隊長 TSF 63 + MTF 61 = 124(94%),
+         其餘 8 隊是歐洲技師本人或 ST 支援排第一位;
+         **沒有 CT/BT 的:0 隊** —— 搭配 CT/BT 這條 100% 成立。
+       · 沒有歐洲技師 92 隊 → 隊長 TS 21、MT 1,正是「一般年保可以 TS/MT 帶」。
+     Tina 指示先用黃色提醒,不擋。 */
+  /* [U] 2026-09-12 Tina:TSWA(Muehlhan 葉片組)要排在同一隊,而且固定是偶數人,
+     不是偶數就要立刻在檢核顯示。
+     [V] 檔案裡 Snail 1 / Snail 2 每天各 4 位 TSWA,工作類型寫 Fan,從來不跟其他技師混隊。
+     所以:TSWA 只進葉片組、葉片組只收 TSWA、自動補人絕不拿 TSWA 去補別隊的缺。 */
+  BLADE: ["TSWA"],
+  BLADE_WORK: ["FAN","BLADE"],
+  HV_LEADER: ["TSF","MTF","HV"],   // 歐洲技師本人排第一位也算合格
+  HV_ASSIST: ["CT","BT"],          // 嚴重問題的隊一定要搭一個
+  EURO_LEVEL: "HV",
+  F_LEVELS: ["TSF","MTF"],
+  CODE: {
+    L:["leave","請假"], T:["training","訓練"], H:["holiday","國定假日"],
+    w:["work","上班(總表沒寫等級)"],          // [V] w = 上班,不擋派工
+    x:["off","休假"], v:["off","休假"], fly:["travel","出差"],
+    // [U] 這幾個代碼代表「他不是為雲林工作的技師」——
+    //     不能被排、也不算進任何人數核對。
+    FMS:["away","不為雲林工作(FMS)"], HL:["away","不為雲林工作(HL)"],
+    F2:["away","不為雲林工作(F2)"],
+    JN1:["other","JN1"], VT:["other","VT"], "?":["unknown","尚未確定"],
+    ON:["onshore","留在岸上"], OF:["offshore","已出海"],
+  },
+  OK_CATS: ["work"],
+  BLANK: ["blank","總表當天空白,沒有指定"],
+  LEADER_EXEMPT: ["TSWA","W"],
+  ROTATION_DAYS: 14,
+  CAP: 12,
+  PAINTER_TEAMS: ["Snail 3"],
+  PAINTER_SEATS: 4,
+  OUTSIDERS: ["Painters","Painter","IPS","Wilson","Rack","Allison","Kevin Shen",
+              "Simon","Mujib","John","Marcin Bruski","Daniel White","Christopher Carroll"],
+  NON_SAILING: ["Coordinator","Warehouse","Standby","Leave","Leave/Training",
+                "Leave + Training","Leave/ Training","Training"],
+  NIGHT: ["night shit","night shift"],
+  WEATHER_ON: 20,
+  // 括號裡是「公司/單位註記」還是「英文通稱」的判斷:
+  //   全大寫 → 註記(SPIE、BGB、MWS、GWS、IPS、NW、CNS…),不必逐一列舉
+  //   一般大小寫 → 通稱(Ricky、Rocky、Ray、Evan…)
+  // TAGS 只用來補抓大小寫混寫的例外。
+  TAGS: new Set(["NEXTWAVE","DAY","NIGHT"]),
+  COMPANY_SUFFIX: ["GWS","IPS","Maxlines","TOWSC","Swire"],
+  FORCED: { "wei hsiang harrison shen":"Harrison Shen", "harrison shen":"Harrison Shen" },
+  MANUAL: { "nikita":"Nikita Rodrigue Barrarmna-boukpessi", "hiba guo":"Kuo, GuanHong (Hiba)" },
+  // 出海計畫最左欄(表頭寫 Date,實際放的是工作類型)的中文對照。
+  // 值有 TS-capa、AS x5、AS+Thermo 這種複合寫法,所以只認前面那一段。
+  WORKTYPE: {
+    TS:"故障排除", AS:"年度保養", HV:"高壓作業", FAN:"風扇", PAINT:"油漆",
+    BLADE:"葉片", YAW:"偏航系統", RFT:"改裝", RETROFIT:"改裝", TMSE:"TMSE",
+    BACKUP:"備援", BUNKER:"加油",
+  },
+};
+const isBladeLevel = lv => R.BLADE.includes(String(lv||"").toUpperCase());
+/* 葉片組的判定:工作類型是 Fan / Blade,或是隊上有人而且全部都是 TSWA */
+function isBladeTeam(worktype, levels) {
+  const head = String(worktype||"").trim().split(/[-+\s]/)[0].toUpperCase();
+  if (R.BLADE_WORK.includes(head)) return true;
+  // 只剩一個 TSWA 的隊不算葉片組 —— 換班日常有一位 TSWA 被寫在別隊(9/08 Pharos 1),那是落單,不是葉片組
+  return levels.length >= 2 && levels.every(isBladeLevel);
+}
+function workLabel(code) {
+  const raw = (code || "").trim();
+  if (!raw) return { raw:"", zh:"" };
+  const head = raw.split(/[-+\s]/)[0].toUpperCase();
+  return { raw, zh: R.WORKTYPE[head] || "" };
+}
+const DEFAULTS = { exclude:[], leader_order:[], overtime:{}, avoid_pairs:[], bind_pairs:[],
+                   night_fixed:[], min_team:3, as_ideal:6, as_acceptable:4, vessel_capacity:12 };
+
+/* ---------------------------------------------------------------- zip */
+async function inflateRaw(bytes) {
+  const ds = new DecompressionStream("deflate-raw");
+  return new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(ds)).arrayBuffer());
+}
+function readZipIndex(u8) {
+  const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+  let eocd = -1;
+  for (let i = u8.length - 22; i >= Math.max(0, u8.length - 66000); i--)
+    if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+  if (eocd < 0) throw new Error("這個檔案不是有效的 xlsx(找不到 zip 結尾)");
+  let count = dv.getUint16(eocd + 10, true), cdOff = dv.getUint32(eocd + 16, true);
+  if (cdOff === 0xFFFFFFFF || count === 0xFFFF) {
+    for (let i = eocd - 20; i >= 0; i--)
+      if (dv.getUint32(i, true) === 0x07064b50) {
+        const z64 = Number(dv.getBigUint64(i + 8, true));
+        count = Number(dv.getBigUint64(z64 + 32, true));
+        cdOff = Number(dv.getBigUint64(z64 + 48, true));
+        break;
+      }
+  }
+  const dec = new TextDecoder("utf-8"), idx = {};
+  let p = cdOff;
+  for (let n = 0; n < count; n++) {
+    if (dv.getUint32(p, true) !== 0x02014b50) break;
+    const method = dv.getUint16(p + 10, true), crc = dv.getUint32(p + 16, true);
+    const csize = dv.getUint32(p + 20, true), usize = dv.getUint32(p + 24, true);
+    const nlen = dv.getUint16(p + 28, true), elen = dv.getUint16(p + 30, true);
+    const clen = dv.getUint16(p + 32, true), lho = dv.getUint32(p + 42, true);
+    idx[dec.decode(u8.subarray(p + 46, p + 46 + nlen))] = { method, csize, usize, crc, lho };
+    p += 46 + nlen + elen + clen;
+  }
+  return { u8, dv, idx };
+}
+async function readPart(zip, name) {
+  const e = zip.idx[name];
+  if (!e) return "";
+  const { dv, u8 } = zip;
+  if (dv.getUint32(e.lho, true) !== 0x04034b50) throw new Error("zip 區塊損壞:" + name);
+  const nlen = dv.getUint16(e.lho + 26, true), elen = dv.getUint16(e.lho + 28, true);
+  const start = e.lho + 30 + nlen + elen;
+  const raw = u8.subarray(start, start + e.csize);
+  return new TextDecoder("utf-8").decode(e.method === 0 ? raw : await inflateRaw(raw));
+}
+
+/* ---------------------------------------------------------------- 產生 xlsx
+
+   只寫一份全新的小檔案,原本那兩個 Excel 從頭到尾都不會被開啟寫入。
+   zip 用 stored(不壓縮),所以只需要自己算 CRC32,不必實作 deflate。
+   ---------------------------------------------------------------- */
+const crc32 = (() => {
+  const tbl = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    tbl[n] = c >>> 0;
+  }
+  return bytes => {
+    let c = 0xFFFFFFFF;
+    for (let i = 0; i < bytes.length; i++) c = tbl[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+    return (c ^ 0xFFFFFFFF) >>> 0;
+  };
+})();
+
+function zipStore(files) {
+  const enc = new TextEncoder();
+  const parts = [], central = [];
+  let offset = 0;
+  const u16 = n => [n & 255, (n >>> 8) & 255];
+  const u32 = n => [n & 255, (n >>> 8) & 255, (n >>> 16) & 255, (n >>> 24) & 255];
+  for (const [name, text] of files) {
+    const nb = enc.encode(name), db = enc.encode(text), crc = crc32(db);
+    const lh = new Uint8Array([...u32(0x04034b50), ...u16(20), ...u16(0), ...u16(0),
+      ...u16(0), ...u16(0), ...u32(crc), ...u32(db.length), ...u32(db.length),
+      ...u16(nb.length), ...u16(0)]);
+    parts.push(lh, nb, db);
+    central.push(new Uint8Array([...u32(0x02014b50), ...u16(20), ...u16(20), ...u16(0),
+      ...u16(0), ...u16(0), ...u16(0), ...u32(crc), ...u32(db.length), ...u32(db.length),
+      ...u16(nb.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0),
+      ...u32(offset), ...nb]));
+    offset += lh.length + nb.length + db.length;
+  }
+  const cdSize = central.reduce((n, c) => n + c.length, 0);
+  const eocd = new Uint8Array([...u32(0x06054b50), ...u16(0), ...u16(0),
+    ...u16(central.length), ...u16(central.length), ...u32(cdSize), ...u32(offset), ...u16(0)]);
+  return new Blob([...parts, ...central, eocd],
+                  { type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+}
+
+const xEsc = v => String(v ?? "").replace(/[&<>]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;" }[c]));
+const colName = n => { let s = ""; while (n > 0) { const r = (n-1) % 26;
+  s = String.fromCharCode(65+r) + s; n = (n - r - 1) / 26; } return s; };
+
+/* rows: [[值, 值, …], …];值是字串或數字,null 代表空格 */
+function makeXlsx(sheetName, rows, widths) {
+  const body = rows.map((cells, ri) => {
+    const r = ri + 1;
+    const cs = cells.map((v, ci) => {
+      if (v === null || v === undefined || v === "") return "";
+      const ref = colName(ci + 1) + r;
+      if (typeof v === "number" && isFinite(v)) return `<c r="${ref}"><v>${v}</v></c>`;
+      return `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${xEsc(v)}</t></is></c>`;
+    }).join("");
+    return `<row r="${r}">${cs}</row>`;
+  }).join("");
+  const cols = (widths || []).map((w, i) =>
+    `<col min="${i+1}" max="${i+1}" width="${w}" customWidth="1"/>`).join("");
+  const sheet =
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">` +
+    (cols ? `<cols>${cols}</cols>` : "") + `<sheetData>${body}</sheetData></worksheet>`;
+  return zipStore([
+    ["[Content_Types].xml",
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">` +
+      `<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>` +
+      `<Default Extension="xml" ContentType="application/xml"/>` +
+      `<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>` +
+      `<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>` +
+      `</Types>`],
+    ["_rels/.rels",
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+      `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>` +
+      `</Relationships>`],
+    ["xl/workbook.xml",
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" ` +
+      `xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">` +
+      `<sheets><sheet name="${xEsc(sheetName)}" sheetId="1" r:id="rId1"/></sheets></workbook>`],
+    ["xl/_rels/workbook.xml.rels",
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+      `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>` +
+      `</Relationships>`],
+    ["xl/worksheets/sheet1.xml", sheet],
+  ]);
+}
+
+/* ---------------------------------------------------------------- xlsx */
+const stripTags = s => s.replace(/<[^>]+>/g, "");
+const unesc = s => s.replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,'"')
+                    .replace(/&apos;/g,"'").replace(/&amp;/g,"&");
+const colNum = c => { let n = 0; for (const ch of c) n = n*26 + (ch.charCodeAt(0)-64); return n; };
+function serialToDate(v) {
+  const f = parseFloat(v);
+  if (!(f > 20000 && f < 80000)) return null;
+  return new Date(Date.UTC(1899,11,30) + Math.floor(f)*86400000).toISOString().slice(0,10);
+}
+function addDays(iso, n) {
+  const d = new Date(iso + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0,10);
+}
+
+class Book {
+  static async open(file, onProgress) {
+    const b = new Book();
+    b.name = file.name;
+    onProgress && onProgress(`讀取 ${file.name}…`);
+    b.zip = readZipIndex(new Uint8Array(await file.arrayBuffer()));
+    const wbx = await readPart(b.zip, "xl/workbook.xml");
+    const rels = await readPart(b.zip, "xl/_rels/workbook.xml.rels");
+    b.parts = {};
+    for (const m of wbx.matchAll(/<sheet name="([^"]+)"[^>]*?r:id="(rId\d+)"/g)) {
+      const t = rels.match(new RegExp(`Id="${m[2]}"[^>]*?Target="([^"]+)"`));
+      if (t) b.parts[unesc(m[1])] = "xl/" + t[1].replace(/^\//, "");
+    }
+    b.sheetNames = Object.keys(b.parts);
+    return b;
+  }
+  /* 只解壓真正要用的分頁 —— 這兩個活頁簿裡有 570MB 和 105MB 的分頁我們從來不碰。 */
+  async prepare(onProgress) {
+    onProgress && onProgress(`解析 ${this.name} 的文字與樣式…`);
+    this.shared = [];
+    const ss = await readPart(this.zip, "xl/sharedStrings.xml");
+    for (const m of ss.matchAll(/<si>([\s\S]*?)<\/si>/g)) {
+      const si = m[1], runs = [...si.matchAll(/<r>([\s\S]*?)<\/r>/g)];
+      if (!runs.length) { const t = unesc(stripTags(si)); this.shared.push([t,t,[]]); continue; }
+      let keep = "", full = "", struck = [];
+      for (const r of runs) {
+        const body = r[1], pr = body.match(/<rPr>([\s\S]*?)<\/rPr>/);
+        const t = unesc(stripTags(body.replace(/<rPr>[\s\S]*?<\/rPr>/, "")));
+        full += t;
+        if (pr && /<strike\s*\/>/.test(pr[1])) struck.push(t); else keep += t;
+      }
+      this.shared.push([keep, full, struck]);
+    }
+    const st = await readPart(this.zip, "xl/styles.xml");
+    const fx = st.match(/<fonts[^>]*>([\s\S]*?)<\/fonts>/);
+    const fonts = fx ? (fx[1].match(/<font>[\s\S]*?<\/font>|<font\s*\/>/g) || []) : [];
+    this.fontStrike = fonts.map(f => /<strike\s*\/>/.test(f));
+    const cx = st.match(/<cellXfs[^>]*>([\s\S]*?)<\/cellXfs>/);
+    const xfs = cx ? (cx[1].match(/<xf [^>]*?\/>|<xf [^>]*?>[\s\S]*?<\/xf>/g) || []) : [];
+    this.xfFont = xfs.map(x => { const m = x.match(/fontId="(\d+)"/); return m ? +m[1] : 0; });
+  }
+  async sheet(name, maxCol) {
+    const data = await readPart(this.zip, this.parts[name]);
+    const cells = new Map();
+    const hidden = new Set();
+    let maxRow = 0, mc = 0;
+    for (const rm of data.matchAll(/<row r="(\d+)"([^>]*?)(?:\/>|>([\s\S]*?)<\/row>)/g)) {
+      const rn = +rm[1], body = rm[3] || "";
+      // AOC 把不要參考的資料藏起來(不能刪但也不該排),所以隱藏列一律跳過
+      if (/hidden="(1|true)"/.test(rm[2])) hidden.add(rn);
+      if (rn > maxRow) maxRow = rn;
+      for (const cm of body.matchAll(/<c r="([A-Z]+)\d+"([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
+        const cn = colNum(cm[1]);
+        if (maxCol && cn > maxCol) continue;
+        const attrs = cm[2], inner = cm[3] || "";
+        const sm = attrs.match(/s="(\d+)"/), sidx = sm ? +sm[1] : 0;
+        let value = "", raw = "", struck = [];
+        if (attrs.includes('t="s"')) {
+          const vm = inner.match(/<v>(\d+)<\/v>/);
+          if (vm) { const s = this.shared[+vm[1]]; if (s) { value = s[0]; raw = s[1]; struck = s[2]; } }
+        } else if (attrs.includes('t="inlineStr"') || inner.includes("<is>")) {
+          value = raw = unesc(stripTags(inner));
+        } else {
+          const vm = inner.match(/<v>([\s\S]*?)<\/v>/);
+          if (vm) value = raw = unesc(vm[1]);
+        }
+        const fid = this.xfFont[sidx] ?? 0;
+        if (value && this.fontStrike[fid]) { struck = struck.concat([value]); value = ""; }
+        if (value || raw) { cells.set(rn*1000 + cn, { value, raw, struck }); if (cn > mc) mc = cn; }
+      }
+    }
+    return { maxRow, maxCol: mc, hidden,
+      cell: (r,c) => cells.get(r*1000+c) || { value:"", raw:"", struck:[] },
+      val:  (r,c) => (cells.get(r*1000+c) || { value:"" }).value.trim() };
+  }
+}
+
+/* 取出某個 zip 區塊「壓縮後」的原始位元組 —— 搬運時完全不重新壓縮 */
+function rawEntry(zip, name) {
+  const e = zip.idx[name], { dv, u8 } = zip;
+  const nlen = dv.getUint16(e.lho + 26, true), elen = dv.getUint16(e.lho + 28, true);
+  const start = e.lho + 30 + nlen + elen;
+  return u8.subarray(start, start + e.csize);
+}
+
+/* 重建 xlsx:除了 replacements 指定的區塊,其他一律原封搬運(不解壓也不重壓)。
+   所以顏色、圖片、其他 16 個分頁、公式全部一個位元組都不會變。
+   原始檔案本身從頭到尾只被讀取,這裡產生的是另一個新檔。 */
+async function rebuildXlsx(zip, replacements) {
+  const enc = new TextEncoder();
+  const u16 = n => [n & 255, (n >>> 8) & 255];
+  const u32 = n => [n & 255, (n >>> 8) & 255, (n >>> 16) & 255, (n >>> 24) & 255];
+  const parts = [], central = [];
+  let offset = 0;
+
+  for (const name of Object.keys(zip.idx)) {
+    let method, crc, csize, usize, data;
+    if (Object.prototype.hasOwnProperty.call(replacements, name)) {
+      const raw = enc.encode(replacements[name]);
+      usize = raw.length; crc = crc32(raw);
+      if (typeof CompressionStream === "function") {
+        const cs = new CompressionStream("deflate-raw");
+        data = new Uint8Array(await new Response(
+          new Blob([raw]).stream().pipeThrough(cs)).arrayBuffer());
+        method = 8;
+      } else { data = raw; method = 0; }
+      csize = data.length;
+    } else {
+      const e = zip.idx[name];
+      method = e.method; crc = e.crc; csize = e.csize; usize = e.usize;
+      data = rawEntry(zip, name);
+    }
+    const nb = enc.encode(name);
+    parts.push(new Uint8Array([...u32(0x04034b50), ...u16(20), ...u16(0), ...u16(method),
+      ...u16(0), ...u16(0), ...u32(crc), ...u32(csize), ...u32(usize),
+      ...u16(nb.length), ...u16(0)]), nb, data);
+    central.push(new Uint8Array([...u32(0x02014b50), ...u16(20), ...u16(20), ...u16(0),
+      ...u16(method), ...u16(0), ...u16(0), ...u32(crc), ...u32(csize), ...u32(usize),
+      ...u16(nb.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0),
+      ...u32(offset), ...nb]));
+    offset += 30 + nb.length + csize;
+  }
+  const cdSize = central.reduce((n, c) => n + c.length, 0);
+  central.push(new Uint8Array([...u32(0x06054b50), ...u16(0), ...u16(0),
+    ...u16(central.length), ...u16(central.length), ...u32(cdSize), ...u32(offset), ...u16(0)]));
+  return new Blob([...parts, ...central],
+    { type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+}
+
+/* ---------- 逐格改寫 sheet XML(保留每一格原本的樣式 s=) ---------- */
+const CIDX = { A:1,B:2,C:3,D:4,E:5,F:6,G:7,H:8,I:9,J:10,K:11,L:12,M:13,N:14 };
+
+function editRow(rowXml, rowNum, edits) {
+  let out = rowXml;
+  for (const [col, e] of Object.entries(edits)) {
+    const re = new RegExp(`<c r="${col}${rowNum}"([^>]*?)(?:/>|>([\\s\\S]*?)</c>)`);
+    const m = out.match(re);
+    const attrs = m ? m[1].replace(/\s*t="[^"]*"/g, "") : "";
+    let cell;
+    if (e.clear) cell = `<c r="${col}${rowNum}"${attrs}/>`;
+    else if (e.num !== undefined) cell = `<c r="${col}${rowNum}"${attrs}><v>${e.num}</v></c>`;
+    else cell = `<c r="${col}${rowNum}"${attrs} t="inlineStr">` +
+                `<is><t xml:space="preserve">${xEsc(e.text)}</t></is></c>`;
+    if (m) { out = out.slice(0, m.index) + cell + out.slice(m.index + m[0].length); continue; }
+    if (e.clear) continue;
+    // 這一欄原本沒有儲存格 → 照欄序插進去
+    let pos = -1;
+    for (const cm of out.matchAll(/<c r="([A-Z]+)\d+"/g))
+      if ((CIDX[cm[1]] || 99) > CIDX[col]) { pos = cm.index; break; }
+    out = pos >= 0 ? out.slice(0, pos) + cell + out.slice(pos)
+                   : out.replace(/<\/row>$/, cell + "</row>");
+  }
+  return out;
+}
+
+/* 成員平均分到原本那幾列,維持原檔一列放幾個人的樣子 */
+function spread(names, rowCount) {
+  const out = new Array(rowCount).fill("");
+  if (!names.length || rowCount <= 0) return out;
+  const per = Math.ceil(names.length / rowCount);
+  for (let i = 0; i < rowCount; i++) {
+    const chunk = names.slice(i * per, (i + 1) * per);
+    out[i] = chunk.join(", ") + (chunk.length && (i + 1) * per < names.length ? "," : "");
+  }
+  return out;
+}
+
+/* ---------------------------------------------------------------- 姓名 */
+const clean = s => String(s).toLowerCase().replace(/[^a-z ]/g,"").replace(/\s+/g," ").trim();
+/* 括號內容是註記(不是英文通稱)嗎 */
+const isNameTag = t => !t || t.toUpperCase() === t || R.TAGS.has(t.toUpperCase());
+// 班表把等級寫在名字後面,可能用「-」也可能只用空白:Graeme.Bissett-ST / Graeme ST
+const LEVEL_RE = new RegExp("[-\\s](" + R.OFFSHORE.concat(R.SHORE).join("|") + ")$", "i");
+
+function rosterKeys(name) {
+  let s = name.trim();
+  for (const suf of R.COMPANY_SUFFIX) s = s.replace(new RegExp("-" + suf + "$","i"), "");
+  const paren = [...s.matchAll(/\(([^)]*)\)/g)].map(m => m[1].trim());
+  const base = s.replace(/\([^)]*\)/g," ").replace(/\s+/g," ").trim();
+  const nicks = paren.filter(p => !isNameTag(p));
+  const keys = new Set();
+  if (base.includes(",")) {
+    const i = base.indexOf(",");
+    const fam = base.slice(0,i).trim(), given = base.slice(i+1).trim();
+    for (const g of [given, ...nicks]) if (g) { keys.add(clean(g+" "+fam)); keys.add(clean(fam+" "+g)); }
+  } else {
+    const parts = base.split(/\s+/);
+    if (parts.length >= 2) {
+      const fam = parts[parts.length-1];
+      for (const g of [parts.slice(0,-1).join(" "), ...nicks]) if (g) keys.add(clean(g+" "+fam));
+    } else if (parts[0]) keys.add(clean(parts[0]));
+  }
+  keys.delete("");
+  return keys;
+}
+function parseToken(tok) {
+  let t = tok.trim().replace(/^[,;]+|[,;]+$/g,"");
+  let prefix = "";
+  const pm = t.match(/^(OT|TT)[-/]\s*/i);
+  if (pm) { prefix = pm[1].toUpperCase(); t = t.slice(pm[0].length); }
+  let level = "";
+  const lm = t.match(LEVEL_RE);
+  if (lm) { level = lm[1].toUpperCase(); t = t.slice(0, lm.index); }
+  const display = t.replace(/[._]+/g," ").replace(/\s+/g," ").trim();
+  return { display, prefix, level, key: clean(display) };
+}
+function fuzzy(key, index) {
+  let best = null, bestScore = 0;
+  for (const k of index.keys()) {
+    if (Math.abs(k.length - key.length) > 3) continue;
+    let same = 0;
+    const used = new Array(key.length).fill(false);
+    for (const ch of k) {
+      const j = [...key].findIndex((c,i) => !used[i] && c === ch);
+      if (j >= 0) { used[j] = true; same++; }
+    }
+    const score = (2*same) / (k.length + key.length);
+    if (score > bestScore) { bestScore = score; best = k; }
+  }
+  return bestScore >= 0.88 ? index.get(best) : null;
+}
+
+/* ---------------------------------------------------------------- 名冊 */
+class Roster {
+  static async build(book, onProgress) {
+    const o = new Roster();
+    const cands = book.sheetNames.filter(n => /^allowance/i.test(n)).sort();
+    if (!cands.length) throw new Error("這個檔案裡沒有 Allowance 分頁,不像是人力總表");
+    o.sheetName = cands[cands.length-1];
+    onProgress && onProgress(`讀取 ${o.sheetName}…`);
+    const sh = await book.sheet(o.sheetName, 420);
+    o.sh = sh;
+    o.dateCol = new Map();
+    for (let c = 5; c <= sh.maxCol; c++) {
+      const d = serialToDate(sh.val(1,c));
+      if (d) o.dateCol.set(d, c);
+    }
+    o.people = []; o.hiddenPeople = [];
+    let group = "";
+    for (let r = 4; r <= sh.maxRow; r++) {
+      const lvl = sh.val(r,3), nm = sh.val(r,4);
+      if (nm && !lvl && !sh.val(r,2)) { group = nm; continue; }
+      if (!lvl || !nm) continue;
+      const person = { row:r, name:nm, level:lvl.toUpperCase(), group,
+                       hidden: sh.hidden.has(r) };
+      /* 隱藏 = AOC 標記「資料要留著但不要用」。
+         還是放進姓名索引,舊班表才認得出這個人是誰;
+         但不進可派工名冊,所以不會被排、也不算進任何人數。 */
+      (person.hidden ? o.hiddenPeople : o.people).push(person);
+    }
+    o.everyone = o.people.concat(o.hiddenPeople);
+    o.byName = new Map(o.everyone.map(p => [p.name, p]));
+    o.index = new Map();
+    for (const p of o.people) for (const k of rosterKeys(p.name)) if (!o.index.has(k)) o.index.set(k,p);
+    for (const p of o.hiddenPeople) for (const k of rosterKeys(p.name)) if (!o.index.has(k)) o.index.set(k,p);
+    // 只寫名字的寫法(班表出現過 "Graeme"、"Graeme ST"),全場只有一個人叫這個名字才認
+    const givenSets = new Map();
+    for (const p of o.everyone) for (const k of rosterKeys(p.name)) {
+      const g = k.split(" ")[0];
+      if (!g) continue;
+      if (!givenSets.has(g)) givenSets.set(g, new Set());
+      givenSets.get(g).add(p.name);
+    }
+    o.givenIndex = new Map();
+    for (const [g,set] of givenSets) if (set.size === 1) o.givenIndex.set(g, o.byName.get([...set][0]));
+    for (const [k,t] of Object.entries({ ...R.FORCED, ...R.MANUAL })) {
+      const hit = o.byName.get(t);
+      if (hit) o.index.set(clean(k), hit);
+    }
+    o.zoneCache = new Map(); o.findCache = new Map(); o.availCache = new Map();
+    /* TSWA 總表填到哪一天 —— 之後的空白才有「推定照常出海」的問題 */
+    o.bladeEdge = "";
+    for (const p of o.people) if (isBladeLevel(p.level))
+      for (const [d, c] of o.dateCol) if (sh.val(p.row, c) && d > o.bladeEdge) o.bladeEdge = d;
+    return o;
+  }
+  isOffshore(p){ return R.OFFSHORE.includes(p.level.toUpperCase()); }
+  isSupport(p){ return R.SUPPORT.includes(p.level.toUpperCase()); }
+  canLead(p){ return R.LEADER.includes(p.level.toUpperCase()); }
+  hasF(p){ return R.F_LEVELS.includes(p.level.toUpperCase()); }
+  code(p, day){ const c = this.dateCol.get(day); return c ? this.sh.val(p.row,c) : ""; }
+  /* 往前找這個人最近一次有填的代碼(最多 back 天) */
+  lastCode(p, day, back) {
+    for (let i = 1; i <= back; i++) {
+      const d = addDays(day, -i), v = (this.code(p, d) || "").trim();
+      if (v) return { date:d, code:v };
+    }
+    return null;
+  }
+  /* [V] TSWA 不做 7 休 7,8 個人天天出海;總表卻只填到眼前幾天(9/12 的檔只填到 9/20),
+     再往後整排空白 —— 但出海計畫 9/21 照樣排了 8 位。
+     [U] 使用者決定:空白就是空白,不替他們猜;只在檢核提醒「總表還沒填到這天」,看到再補。
+     這裡回傳「總表填到的最後一天還在上班、但這一天空白」的 TSWA。 */
+  bladeUnfilled(day) {
+    const edge = this.bladeEdge;
+    if (!edge || day <= edge) return [];
+    const gap = Math.round((new Date(day) - new Date(edge)) / 86400000);
+    if (gap > 28) return [];
+    return this.people.filter(p => {
+      if (!isBladeLevel(p.level) || this.code(p, day)) return false;
+      const back = this.lastCode(p, day, gap + 2);
+      const up = back ? back.code.toUpperCase() : "";
+      return back && (up === "W" || up === "OF" || up === "ON" || R.OFFSHORE.includes(up));
+    });
+  }
+  /* 比對順序:完整吻合 → 前綴唯一("Graeme B")→ 只有名且唯一("Graeme")→ 模糊(拼法差異) */
+  find(key) {
+    if (!key) return null;
+    if (this.findCache.has(key)) return this.findCache.get(key);
+    let p = this.index.get(key) || null;
+    if (!p && key.length >= 4) {
+      const hits = [...this.index.keys()].filter(k => k.startsWith(key));
+      const uniq = new Set(hits.map(k => this.index.get(k).name));
+      if (uniq.size === 1) p = this.index.get(hits[0]);
+    }
+    if (!p) p = this.givenIndex.get(key) || null;
+    if (!p) p = fuzzy(key, this.index);
+    this.findCache.set(key, p || null);
+    return p || null;
+  }
+  zone(day) {
+    if (this.zoneCache.has(day)) return this.zoneCache.get(day);
+    const c = this.dateCol.get(day);
+    let out;
+    if (!c) out = { zone:"missing", of:0, on:0 };
+    else {
+      let of=0,on=0,lv=0;
+      for (const p of this.people) {
+        const v = this.sh.val(p.row,c).toUpperCase();
+        if (v === "OF") of++; else if (v === "ON") on++;
+        else if (R.OFFSHORE.includes(v)) lv++;
+      }
+      out = (of === 0 && on >= R.WEATHER_ON) ? { zone:"weather_off", of, on }
+          : { zone:(of+on > lv ? "history" : "plan"), of, on };
+    }
+    this.zoneCache.set(day, out);
+    return out;
+  }
+  avail(p, day) {
+    const ck = p.name + "|" + day;
+    if (this.availCache.has(ck)) return this.availCache.get(ck);
+    const code = (this.code(p,day) || "").trim();
+    let out;
+    if (p.hidden) out = { ok:false, cat:"hidden", why:"總表裡已隱藏,不再排班", code };
+    else if (!this.isOffshore(p) && !this.isSupport(p))
+      out = { ok:false, cat:"shore", why:`岸上職務(${p.level})`, code };
+    else if (!code) out = { ok:false, cat:R.BLANK[0], why:R.BLANK[1], code:"" };
+    else {
+      const hit = R.CODE[code] || R.CODE[code.toLowerCase()] || R.CODE[code.toUpperCase()];
+      if (hit) {
+        const [cat, why] = hit;
+        out = cat === "offshore" ? { ok:true, cat:"offshore", why:"已出海", code }
+            : R.OK_CATS.includes(cat)
+              ? { ok:true, cat: this.isSupport(p) ? "support" : "available", why, code }
+            : { ok:false, cat, why, code };
+      } else if (R.OFFSHORE.includes(code.toUpperCase()) || R.SUPPORT.includes(code.toUpperCase()))
+        out = { ok:true, cat: this.isSupport(p) ? "support" : "available",
+                why: this.isSupport(p) ? `岸上職務(${code}),可支援出海` : `可出海(${code})`, code };
+      else out = { ok:false, cat:"other", why:`代碼 ${code}`, code };
+    }
+    this.availCache.set(ck, out);
+    return out;
+  }
+}
+
+/* ---------------------------------------------------------------- 出海計畫 */
+const isOutsider = d => R.OUTSIDERS.some(x => d.toLowerCase().includes(x.toLowerCase()));
+/* painter 隊:隊名在清單裡(Snail 3),或工作類型就寫 Paint。
+   [V] 全年還有一個隊名直接叫 "Paint" 的隊(24 次,成員全是 IPS,工作類型全是 Paint),
+   只認隊名會漏掉它,結果它每次都被當成「隊長不合格」誤報。 */
+const isPainterTeam = (name, worktype) =>
+  R.PAINTER_TEAMS.some(t => (name||"").toLowerCase().startsWith(t.toLowerCase())) ||
+  (worktype||"").toUpperCase().startsWith("PAINT");
+
+class Plan {
+  static async build(book, onProgress) {
+    const o = new Plan();
+    o.sheetName = book.sheetNames.find(n => n.toLowerCase().includes("daily ops"));
+    if (!o.sheetName) throw new Error("這個檔案裡沒有 Daily Ops 分頁,不像是每日出海計畫");
+    onProgress && onProgress(`讀取 ${o.sheetName}…`);
+    const sh = await book.sheet(o.sheetName, 14);
+    o.days = new Map();
+    const starts = [];
+    for (let r = 1; r <= sh.maxRow; r++) {
+      if (sh.hidden.has(r)) continue;
+      const v = sh.val(r,1);
+      if (!v) continue;
+      let d = serialToDate(v);
+      if (!d) { const m = v.match(/^(\d{2})\/(\d{2})\/(\d{4})$/); if (m) d = `${m[3]}-${m[2]}-${m[1]}`; }
+      if (d) starts.push([r,d]);
+    }
+    for (let i = 0; i < starts.length; i++) {
+      const [r0,d] = starts[i];
+      const r1 = i+1 < starts.length ? starts[i+1][0]-1 : sh.maxRow;
+      o.days.set(d, Plan.parseDay(sh, d, r0, r1));
+      o.hiddenRows = sh.hidden;
+    }
+    o.dates = [...o.days.keys()].sort();
+    o.book = book;                       // 保留原始 zip,產生新檔時要原封搬運其他區塊
+    o.part = book.parts[o.sheetName];
+    return o;
+  }
+  static members(sh, r) {
+    const cell = sh.cell(r,4), struckKeys = new Set();
+    for (const s of cell.struck)
+      for (const t of s.split(/[,;+]/)) if (t.trim()) struckKeys.add(clean(parseToken(t).display));
+    const out = [];
+    for (const tok of (cell.raw || "").split(/[,;+]/)) {
+      const t = tok.trim();
+      if (!t || t.length > 42 || !/[A-Za-z]/.test(t)) continue;
+      const info = parseToken(t);
+      if (!info.display) continue;
+      out.push({ ...info, struck: struckKeys.has(info.key), row:r, person:null });
+    }
+    return out;
+  }
+  static parseDay(sh, d, r0, r1) {
+    const day = { date:d, teams:[], blocks:{}, weather:"", headRow:r0, endRow:r0 };
+    let cur = null;
+    const notes = [];
+    for (let r = r0+1; r <= r1; r++) {
+      if (sh.hidden.has(r)) continue;                 // 隱藏列不參考
+      const a = sh.val(r,1), b = sh.val(r,2), c = sh.val(r,3), dd = sh.val(r,4);
+      const note = [sh.val(r,13), sh.val(r,14)].filter(Boolean).join(" ");
+      // 真正用到的最後一列(最後一天的 r1 會是整張表的 maxRow,不能拿來當結尾)
+      for (let cc = 1; cc <= 14; cc++) if (sh.val(r,cc)) { day.endRow = r; break; }
+      if (note) notes.push(note);
+      if (c) { cur = { date:d, worktype:a, vessel:b, name:c, night:false, headRow:r,
+                       rows:[], dRows:[], members:[], works:[], comment:"" }; day.teams.push(cur); }
+      if (b && R.NON_SAILING.some(x => x.toLowerCase() === b.trim().toLowerCase())) {
+        if (cur && cur.headRow === r) { day.teams.pop(); cur = null; }
+        (day.blocks[b.trim()] = day.blocks[b.trim()] || []).push(...Plan.members(sh,r));
+        continue;
+      }
+      if (b && R.NIGHT.some(k => b.toLowerCase().includes(k)) && cur) cur.night = true;
+      if (!cur) continue;
+      cur.rows.push(r);
+      if (note) cur.comment = (cur.comment + " " + note).trim();
+      if (dd) { cur.dRows.push(r); cur.members.push(...Plan.members(sh,r)); }
+      // 工單:E=ATS Case ID、F=Error Code、G=Turbine、H=Fault description、J=PTW、L=Service Order
+      const turbine = sh.val(r,7), fault = sh.val(r,8);
+      if (turbine || fault)
+        cur.works.push({ turbine, fault, caseId:sh.val(r,5), err:sh.val(r,6),
+                         ptw:sh.val(r,10), so:sh.val(r,12) });
+    }
+    const blob = notes.join(" ").toLowerCase();
+    for (const kw of ["wow","cancel","weather day","weather down"])
+      if (blob.includes(kw)) { day.weather = kw.toUpperCase(); break; }
+    for (const t of day.teams) {
+      t.painter = isPainterTeam(t.name, t.worktype);
+      t.turbines = groupWorks(t.works || []);
+    }
+    return day;
+  }
+}
+
+/* 工單依機組編號分群,同一支機組的故障描述收在一起 */
+function groupWorks(works) {
+  const map = new Map();
+  for (const w of works) {
+    const id = (w.turbine || "").trim() || "(未填機組)";
+    if (!map.has(id)) map.set(id, []);
+    const items = map.get(id);
+    const key = (w.fault || "").trim() + "|" + (w.caseId || "") + "|" + (w.ptw || "");
+    if (key !== "||" && !items.some(x => (x._k) === key)) { w._k = key; items.push(w); }
+    else if (key === "||" && !items.length) { w._k = key; items.push(w); }
+  }
+  return [...map.entries()].map(([id, items]) => ({ id, items }));
+}
+
+/* ================================================================ 檢核核心
+
+   evaluate() 只吃「一份隊伍清單」,不管它是從 Excel 讀來的還是使用者改過的草稿,
+   所以總覽跟草稿走的是同一套規則 —— 草稿改一個人就能立刻再跑一次。
+   ================================================================ */
+
+function linkNames(plan, roster, day) {
+  const d = plan.days.get(day);
+  if (!d || d._linked) return;
+  for (const t of d.teams)
+    for (const m of t.members) if (!isOutsider(m.display)) m.person = roster.find(m.key);
+  d._linked = true;
+}
+
+function teamsFromPlan(plan, roster, day) {
+  if (!plan.days.has(day)) return [];       // 出海計畫還沒建立這一天
+  linkNames(plan, roster, day);
+  return plan.days.get(day).teams.map(t => ({
+    name:t.name, vessel:t.vessel, worktype:t.worktype, night:t.night, painter:t.painter,
+    comment:t.comment, turbines:t.turbines || [],
+    members: t.members.map(m => ({ person:m.person, display:m.display, level:m.level,
+      struck:m.struck, outsider:isOutsider(m.display), prefix:m.prefix })),
+  }));
+}
+
+function teamsFromDraft(D, roster) {
+  return D.teams.map(t => ({
+    name:t.name, vessel:t.vessel, worktype:t.worktype, night:t.night, painter:t.painter,
+    comment:"", turbines:t.turbines || [],
+    members: t.slots.filter(s => s.name || s.fixed).map(s => s.fixed
+      ? { person:null, display:s.fixed, level:"", struck:false, outsider:true, prefix:"" }
+      : { person:roster.byName.get(s.name) || null, display:s.name, level:"",
+          struck:false, outsider:false, prefix:"" }),
+  }));
+}
+
+const isSupportMember = m => !!(m.person && R.SUPPORT.includes(m.person.level.toUpperCase()));
+/* 兩種身分取比較高的那個(岸上職務除外,以總表為準) */
+function bestLevel(planLv, rosterLv) {
+  const a = (planLv||"").toUpperCase(), b = (rosterLv||"").toUpperCase();
+  if (!a) return b; if (!b) return a;
+  if (R.SUPPORT.includes(b) || R.SHORE.includes(b)) return b;
+  const ia = R.LEVEL_RANK.indexOf(a), ib = R.LEVEL_RANK.indexOf(b);
+  if (ia < 0) return b; if (ib < 0) return a;
+  return ia <= ib ? a : b;
+}
+const memberLevel = m => m.person ? bestLevel(m.level, m.person.level) : (m.level || "");
+/* 列入「班表已排」核對的人:不含劃掉的、也不含外部支援。
+   岸上職務(ST)排到了就算 —— 他人真的在船上。 */
+const counted = t => t.members.filter(m => !m.struck && !m.outsider);
+const checkable = counted;
+const seatsOf = t => t.members.filter(m => !m.struck).length;
+
+function evaluate(teams, roster, day, S) {
+  const z = roster.zone(day);
+  const issues = [];
+  const add = (level,kind,msg,fix,where) => issues.push({ level,kind,msg,fix:fix||"",where:where||"" });
+  const excluded = new Set((S.exclude||[]).map(x => x.toLowerCase()));
+
+  const avail = new Map();
+  for (const p of roster.people) {
+    let a = roster.avail(p, day);
+    if (excluded.has(p.name.toLowerCase())) a = { ok:false, cat:"excluded", why:"設定裡排除", code:a.code };
+    avail.set(p.name, a);
+  }
+  /* [U] 代碼 FMS / HL / F2 = 當天不是為雲林工作的技師,
+     不能排、也不算進任何人數核對。被排到就單獨提醒一次,不當成一般的派工衝突。 */
+  const isAway = m => {
+    if (!m.person) return false;
+    if (m.person.hidden) return true;                    // 隱藏的人不算
+    return (avail.get(m.person.name)||{}).cat === "away";  // FMS / HL / F2
+  };
+  const crew = t => counted(t).filter(m => !isAway(m));
+  const awayHits = [], hiddenHits = [];
+  for (const t of teams) for (const m of counted(t)) {
+    if (!m.person) continue;
+    if (m.person.hidden) hiddenHits.push(`${m.person.name} 在 ${t.name}`);
+    else if ((avail.get(m.person.name)||{}).cat === "away")
+      awayHits.push(`${m.person.name}(${avail.get(m.person.name).why})在 ${t.name}`);
+  }
+
+  const scheduled = new Map();
+  for (const t of teams) for (const m of crew(t)) if (m.person) {
+    if (!scheduled.has(m.person.name)) scheduled.set(m.person.name, []);
+    scheduled.get(m.person.name).push(t.name);
+  }
+  /* TSWA 總表還沒填到這一天 —— 不替他們猜,只提醒 */
+  if (z.zone === "plan") {
+    const unfilled = roster.bladeUnfilled(day);
+    const notYet = unfilled.filter(p => !scheduled.has(p.name)).map(p => p.name);
+    const already = unfilled.filter(p => scheduled.has(p.name)).map(p => p.name);
+    if (notYet.length)
+      add("warn","tswa_unfilled",
+          `TSWA 的總表只填到 ${roster.bladeEdge},這一天還是空白,所以 ${notYet.length} 位排不進草稿:` + notYet.join("、"),
+          "TSWA 通常天天出海。請在總表把這幾天填上 w(請假的填 L),按「換總表」重讀就會排進去");
+    else if (already.length)
+      add("info","tswa_unfilled",
+          `TSWA 已經排了 ${already.length} 位,但總表這一天還是空白(只填到 ${roster.bladeEdge})`,
+          "班表沒問題,只是總表要記得補填");
+  }
+  const badTeams = new Set();
+  const minTeam = S.min_team ?? 3, cap = S.vessel_capacity ?? R.CAP;
+  const seats = new Map();
+
+  for (const t of teams) {
+    const k = t.vessel + "|" + t.night;
+    seats.set(k, (seats.get(k)||0) + seatsOf(t));
+    if (t.painter) continue;                       // [T] Snail 3 不套用任何規則
+    const mem = crew(t), n = mem.length;
+    const isHV = (t.worktype||"").toUpperCase() === "HV";
+
+    if (n === 0 && (t.turbines||[]).length) {
+      add("warn","no_crew",
+          `${t.name} 有工作(${t.turbines.map(g=>g.id).join("、")}),但沒有排任何人`,
+          "確認是還沒排,還是這一隊今天不出海", t.name);
+      badTeams.add(t.name);
+    }
+
+    /* ---- TSWA(Muehlhan 葉片組)----
+       [U] TSWA 要排在一起、固定偶數,不是偶數就立刻列為要處理。
+       [V] 全年掃過:TSWA 兩兩一組跟著 TS/MT 出海是有的(7/16 Lugang 3 兩位、8/27 Snail 2 兩位),
+           所以不擋「跟其他技師同隊」,只擋「落單」—— 8/19 Pharos 3 三位 TSWA 那天,
+           備註就寫著 PTW: add Marek Marciniak,正是補成四位。 */
+    const memLv = mem.filter(m => m.person).map(m => m.person.level.toUpperCase());
+    const tswaN = memLv.filter(isBladeLevel).length;
+    const blade = isBladeTeam(t.worktype, memLv);
+    if (tswaN % 2 === 1) {
+      const who = mem.filter(m => m.person && isBladeLevel(m.person.level)).map(m => m.person.name);
+      const spare = roster.people.filter(p => isBladeLevel(p.level) &&
+                      avail.get(p.name).ok && !scheduled.has(p.name));
+      add("stop","tswa_odd",
+          `${t.name} 有 ${tswaN} 位 TSWA(${who.join("、")}),TSWA 要成雙(偶數)`,
+          spare.length ? "今天還可以補:" + spare.map(p=>p.name).join("、")
+                       : "今天沒有其他可用的 TSWA,要拿掉一位,或從別隊調一位過來湊成雙", t.name);
+      badTeams.add(t.name);
+    }
+    if (blade) continue;                            // 葉片組沒有隊長編制,人數也是成雙算,下面的規則不套用
+
+    if (n > 0 && n < minTeam) {
+      const pool = roster.people.filter(p => avail.get(p.name).ok && !scheduled.has(p.name)
+                                          && !isBladeLevel(p.level));   // TSWA 不補別隊
+      add("warn","team_size", `${t.name} 只有 ${n} 人,低於 ${minTeam} 人下限`,
+          pool.length ? "可補:" + pool.slice(0,5).map(p=>p.name).join("、") : "今天沒有可補的人", t.name);
+      badTeams.add(t.name);
+    }
+    if ((t.worktype||"").toUpperCase() === "AS" && n > 0 && n < (S.as_acceptable ?? 4)) {
+      add("warn","as_size", `${t.name} 年保隊只有 ${n} 人`,
+          `年保理想 ${S.as_ideal ?? 6} 人,4～5 人算正常,低於 4 才要補`, t.name);
+      badTeams.add(t.name);
+    }
+
+    const lvls = new Set(mem.filter(m=>m.person).map(m=>m.person.level.toUpperCase()));
+    if (lvls.size && [...lvls].every(l => R.LEADER_EXEMPT.includes(l))) continue;
+
+    // 有歐洲技師(Level = HV)才是「HV 嚴重問題」的隊,規則才收緊
+    const hasEuro = isHV && mem.some(m => m.person &&
+                    m.person.level.toUpperCase() === R.EURO_LEVEL);
+    /* mem 已排除岸上支援職(ST)。這裡再跳過歐洲技師(HV):
+       他常被寫在名單第一位,但依 Tina 的說法他是專業支援,隊長仍是 TSF / MTF。
+       不跳過的話,Nick Bond 這種人排第一位就會被誤判成「階級太低不能帶隊」。 */
+    const lead = mem.find(m => m.person &&
+      m.person.level.toUpperCase() !== R.EURO_LEVEL &&      // 歐洲技師是專業支援,不是隊長
+      !R.SUPPORT.includes(m.person.level.toUpperCase()));   // 岸上職務也不當隊長
+    if (lead) {
+      const lv = lead.person.level.toUpperCase();
+      const ok = hasEuro ? R.HV_LEADER.includes(lv) : roster.canLead(lead.person);
+      if (!ok) {
+        const cand = mem.filter(m => m.person && (hasEuro
+              ? R.HV_LEADER.includes(m.person.level.toUpperCase()) : roster.canLead(m.person)))
+          .map(m => m.person.name);
+        add(hasEuro ? "warn" : "stop", hasEuro ? "hv_leader" : "leader",
+          hasEuro
+            ? `${t.name} 有歐洲技師(HV),隊長 ${lead.person.name}(${lead.person.level})不是 TSF / MTF`
+            : `${t.name} 名單第一位是 ${lead.person.name}(${lead.person.level}),` +
+              `不是隊長級 —— CT、BT 只能當隊員`,
+          cand.length ? "隊上可接隊長:" + cand.join("、")
+            : (hasEuro ? "這一隊要從外面補一位 TSF 或 MTF 當隊長"
+                       : "這一隊沒有 TS/TSF/MT/MTF,要從外面補一位"), t.name);
+        badTeams.add(t.name);
+      }
+    }
+    // 歐洲技師 + TSF/MTF 隊長 + 一個 CT 或 BT,三個一組才成隊
+    if (hasEuro && !mem.some(m => m.person && R.HV_ASSIST.includes(m.person.level.toUpperCase()))) {
+      const cand = roster.people.filter(p => R.HV_ASSIST.includes(p.level.toUpperCase())
+                     && avail.get(p.name).ok && !scheduled.has(p.name));
+      add("warn","hv_assist", `${t.name} 有歐洲技師(HV),但隊裡沒有 CT 或 BT`,
+          cand.length ? "今天可搭配:" + cand.slice(0,5).map(p=>p.name).join("、")
+                      : "今天沒有可用的 CT / BT", t.name);
+      badTeams.add(t.name);
+    }
+  }
+
+  /* ---- TSWA 整組規則 ----
+     [U] 正常 8 位、分兩隊、同進同出。所以:
+       · 今天可出海的 TSWA 有人沒被排到 → 提醒(整組行動,不該有人留在岸上,除非是奇數湊不成雙)
+       · 有 TSWA 的隊伍分在不同船或不同班 → 提醒(同進同出) */
+  {
+    const tswaAvail = roster.people.filter(p => isBladeLevel(p.level) &&
+      avail.get(p.name).ok && avail.get(p.name).cat === "available");
+    const out = tswaAvail.filter(p => !scheduled.has(p.name)).map(p => p.name);
+    if (z.zone === "plan" && out.length) {
+      const odd = tswaAvail.length % 2 === 1;
+      add("warn","tswa_left",
+          `TSWA 是整組行動的:今天 ${tswaAvail.length} 位可出海,有 ${out.length} 位沒排到:` + out.join("、"),
+          odd ? "今天 TSWA 是奇數,一定會有一位湊不成雙,確認留下的是不是這一位"
+              : "正常是 8 位分兩隊同進同出,確認是不是漏排");
+    }
+    const spots = new Set(teams.filter(t => crew(t).some(m => m.person && isBladeLevel(m.person.level)))
+                               .map(t => t.vessel + (t.night ? "(夜)" : "")));
+    if (spots.size > 1)
+      add("warn","tswa_split", `TSWA 分在不同的船或班:` + [...spots].join("、"),
+          "TSWA 兩隊是同進同出的,通常一起搭 World Sea");
+  }
+
+  for (const [k,used] of seats) {
+    const [vessel, nightStr] = k.split("|");
+    const night = nightStr === "true";
+    if (used > cap) {
+      const hasPainter = teams.some(t => t.painter && t.vessel===vessel && t.night===night && seatsOf(t)>0);
+      add("stop","capacity",
+        `${vessel} ${night?"夜班":"白天班"} 共 ${used} 人,超過 ${cap} 席` +
+        (hasPainter ? `(Snail 3 有人,已含 ${R.PAINTER_SEATS} 席 painter)` : ""),
+        "建議移出非隊長、非綁定、加班意願低的人", vessel);
+      teams.filter(t => t.vessel===vessel && t.night===night).forEach(t => badTeams.add(t.name));
+    }
+  }
+
+  for (const [name, ts] of scheduled) {
+    const a = avail.get(name);
+    if (ts.length > 1) {
+      add("stop","duplicate", `${name} 同一天被排在 ${ts.length} 隊:${ts.join("、")}`,
+          "保留有隊長身分或缺口較大的那一隊", ts[0]);
+      ts.forEach(x => badTeams.add(x));
+    }
+    if (!a.ok && a.cat !== "blank" && a.cat !== "onshore") {
+      const lvl = (roster.byName.get(name)||{}).level;
+      const same = roster.people.filter(p => p.level===lvl && avail.get(p.name).ok && !scheduled.has(p.name));
+      add("stop","unavailable", `${name} 被排了,但總表當天是「${a.why}」`,
+          same.length ? "同等級可替補:" + same.slice(0,5).map(p=>p.name).join("、")
+                      : "同等級今天沒有可替補的人", ts[0]);
+      badTeams.add(ts[0]);
+    }
+  }
+
+  for (const t of teams) {
+    if (t.painter) continue;
+    const names = new Set(crew(t).filter(m=>m.person).map(m=>m.person.name));
+    for (const [a,b] of (S.avoid_pairs||[])) if (names.has(a) && names.has(b)) {
+      add("warn","avoid", `${t.name} 裡同時有 ${a} 和 ${b},他們設定成不同隊`, "把其中一位換到別隊", t.name);
+      badTeams.add(t.name);
+    }
+    for (const [a,b] of (S.bind_pairs||[])) if (names.has(a) !== names.has(b)) {
+      const inT = names.has(a) ? a : b, out = names.has(a) ? b : a;
+      if (scheduled.has(out))
+        add("warn","bind", `${inT} 和 ${out} 設定成同隊,但 ${out} 被排在 ${scheduled.get(out).join("、")}`,
+            `把 ${out} 換到 ${t.name}`, t.name);
+    }
+  }
+
+  if (z.zone === "plan") {
+    const missing = roster.people
+      .filter(p => avail.get(p.name).ok && avail.get(p.name).cat === "available" && !scheduled.has(p.name))
+      .map(p => p.name);
+    if (missing.length)
+      add("warn","not_scheduled",
+        `總表說可以出海、但沒有被排到的人有 ${missing.length} 位:` + missing.slice(0,12).join("、"),
+        "確認是漏排,還是刻意留作備援");
+  }
+
+  const unknown = [...new Set(teams.flatMap(t =>
+    t.members.filter(m => !m.person && !m.outsider).map(m => m.display)))].sort();
+  if (unknown.length)
+    add("warn","unknown_name", `有 ${unknown.length} 個名字在總表裡找不到:` + unknown.slice(0,10).join("、"),
+        "這些多半是外包或臨時支援,可以在設定的排除名單裡處理");
+
+  if (hiddenHits.length)
+    add("info","hidden", `有 ${hiddenHits.length} 位在總表裡是隱藏的,不列入人數:` +
+        hiddenHits.slice(0,6).join("、"),
+        "隱藏代表資料留著但不再排班,所以這些人不算進核對");
+  if (awayHits.length)
+    add("warn","away", `有 ${awayHits.length} 位當天不是為雲林工作,卻出現在班表:` +
+        awayHits.slice(0,6).join("、"),
+        "這幾位不算進人數核對,確認是不是要拿掉");
+
+  if (z.zone === "weather_off")
+    issues.unshift({ level:"info", kind:"weather",
+      msg:`這一天總表全員留在岸上(${z.on} 人)、沒有人標 OF,判定為天氣取消`,
+      fix:"班表本來就會先排人,取消時只畫刪除線或註記 WOW,所以不做人數比對", where:"" });
+
+  const total = teams.filter(t => !t.painter).reduce((s,t) => s + crew(t).length, 0);
+  const should = roster.people.filter(p => {
+    const a = avail.get(p.name);
+    if (a.cat === "support") return scheduled.has(p.name);   // 岸上職務:排到了才算基準
+    return a.ok && (a.cat === "available" || a.cat === "offshore");
+  }).length;
+
+  return {
+    date: day, zone: z.zone, avail, scheduled, badTeams,
+    summary: { teams: teams.filter(t => seatsOf(t)).length, scheduled: total, should,
+               diff: total - should, of:z.of, on:z.on,
+               stop: issues.filter(i=>i.level==="stop").length,
+               warn: issues.filter(i=>i.level==="warn").length },
+    issues,
+    unschedulable: groupUnschedulable(roster, avail),
+  };
+}
+
+function groupUnschedulable(roster, avail) {
+  const groups = new Map();
+  for (const p of roster.people) {
+    const a = avail.get(p.name);
+    if (a.ok || a.cat === "shore") continue;
+    if (!groups.has(a.why)) groups.set(a.why, []);
+    groups.get(a.why).push({ name:p.name, level:p.level, group:p.group });
+  }
+  return [...groups.entries()]
+    .map(([why,people]) => ({ why, people, minor: why === R.BLANK[1] }))
+    .sort((a,b) => (a.minor - b.minor) || (b.people.length - a.people.length));
+}
+
+/* ---------------------------------------------------------------- 草稿 */
+/* 有沒有「可以拿來當範本」的班表 —— 檔案裡有的日子算,畫面上做好的草稿也算。
+   [U] Tina 要在 9/15 排完之後,讓 9/16 直接參考 9/15,
+       但出海計畫只寫到 9/14,所以基準日不能只認檔案裡的日期。 */
+const hasCrew = (plan, d) =>
+  (plan.days.has(d) && plan.days.get(d).teams.some(t => t.members.length)) ||
+  (DRAFTS.has(d) && DRAFTS.get(d).teams.some(t => t.slots.some(s => s.name || s.fixed)));
+
+/* 把「基準日」正規化成一份隊伍清單,不管它來自檔案還是來自草稿 */
+function baseTeams(plan, roster, base, preferFile) {
+  /* 同一天檔案裡有、畫面上也有草稿時,以草稿為準 —— 那是使用者最後改過的版本。
+     只有「拿這一天自己當起頭」(preferFile)時才照檔案,不然一鍵產生會拿自己的草稿重排自己。 */
+  const d = DRAFTS.get(base);
+  if ((!d || preferFile) && plan.days.has(base)) { linkNames(plan, roster, base); return plan.days.get(base).teams; }
+  if (!d) return null;
+  return d.teams.map(t => ({
+    name:t.name, vessel:t.vessel, worktype:t.worktype, night:t.night, painter:t.painter,
+    members: t.slots.filter(s => s.name || s.fixed).map(s => s.fixed
+      ? { display:s.fixed, person:null, struck:false, level:"" }
+      : { display:s.name, person: roster.byName.get(s.name) || null, struck:false, level:"" }),
+  }));
+}
+
+/* 草稿也可以當基準日,但寫回 Excel 時一定要有一個「檔案裡真的存在」的區塊當版面。
+   所以順著 草稿→它的基準日 一路往回走,走到檔案裡有的那一天為止。 */
+function layoutDay(plan, base) {
+  let b = base;
+  for (let i = 0; b && i < 40; i++) {
+    if (plan.days.has(b)) return plan.days.get(b);
+    b = (DRAFTS.get(b) || {}).base;
+  }
+  return null;
+}
+
+function baselineDate(plan, target) {
+  // 同梯次優先:每 14 天往前找,最多回推一年 —— 出海計畫沒寫到的遠期日子也對得到
+  for (let k = 1; k <= 26; k++) {
+    const c = addDays(target, -R.ROTATION_DAYS * k);
+    if (hasCrew(plan, c)) return c;
+  }
+  // 真的找不到同梯次,就退而求其次抓最近有排班的一天
+  for (let b = 1; b <= 120; b++) {
+    const c = addDays(target, -b);
+    if (hasCrew(plan, c)) return c;
+  }
+  return null;
+}
+
+/* 上一輪班表從頭到尾沒被排到、這一輪可以出海的人 —— Jimmy Hsu 的成因。
+   刻意看「班表有沒有出現過」而不是總表代碼:歷史區寫的是 OF/ON,
+   拿它判斷會把整批留守的人都誤判成新回來的(實測 4 人 vs 31 人)。 */
+function returningPeople(plan, roster, base, target) {
+  const seen = new Set();
+  for (let i = 0; i < 7; i++) {
+    const d = addDays(base, i);
+    const ts = baseTeams(plan, roster, d);        // 檔案裡的或畫面上的草稿都算
+    if (!ts) continue;
+    for (const t of ts)
+      for (const m of t.members) if (m.person) seen.add(m.person.name);
+  }
+  return roster.people
+    .filter(p => roster.isOffshore(p) && !seen.has(p.name) && roster.avail(p,target).cat === "available")
+    .map(p => ({ name:p.name, level:p.level }));
+}
+
+/* 出海計畫裡這一天已經排了人嗎(只看檔案,不看畫面上的草稿) */
+const fileHasCrew = (plan, d) =>
+  plan.days.has(d) && plan.days.get(d).teams.some(t => t.members.some(m => !m.struck));
+
+function buildDraft(plan, roster, target, S, base) {
+  /* [U] 2026-09-12 Tina:9/15 在檔案裡已經排好了,一鍵產生卻照 9/01 重排一遍。
+     檔案裡已經有的日子,草稿要以「那一天自己的內容」起頭 ——
+     只把當天不能出海的人挖掉、缺的補上,不要拿上一輪蓋掉 AOC 已經排好的東西。
+     使用者手動指定基準日時還是照指定的。 */
+  const fromFile = !base && fileHasCrew(plan, target);
+  base = base || (fromFile ? target : baselineDate(plan, target));
+  if (!base) return { error:"往前找不到可以當基準的日子,請手動指定" };
+  const bteams = baseTeams(plan, roster, base, base === target);
+  if (!bteams) return { error:`基準日 ${base} 既不在出海計畫裡,也還沒有草稿` };
+  /* 總表在「今天」前後是兩套代碼:之前寫 OF/ON(已發生的事實),之後才寫等級。
+     對已經過去的日子產生草稿,可用人力池會是空的,補人一定失敗、整份草稿都是空缺,
+     所以直接講清楚,不要讓人以為工具壞了。 */
+  const z = roster.zone(target).zone;
+  const isNew = !plan.days.has(target);
+  const zoneNote = z === "plan"
+    ? (isNew ? `出海計畫還沒有 ${target} 這一天,這份草稿是照基準日 ${base} 的隊伍結構開出來的。`
+             + `　確認後要自己在 Excel 新增這一天的區塊,再把各隊貼進去。` : "")
+    : (z === "weather_off"
+        ? "這一天總表全員留在岸上(天氣取消),草稿只能當參考。"
+        : "這一天總表已經是事後紀錄(OF / ON),不是未來計畫 —— 草稿補不了人,請改選今天或之後的日期。");
+  const excluded = new Set((S.exclude||[]).map(x => x.toLowerCase()));
+  const used = new Set();
+  const teams = [];
+
+  const tswaToday = roster.people.some(p => isBladeLevel(p.level) && roster.avail(p, target).cat === "available");
+  for (const t of bteams) {
+    // 空的隊伍不帶進草稿 —— 但葉片組例外:今天有 TSWA 可出海,就要把 Snail 1 / Snail 2 留著給他們
+    if (!t.members.length && !(tswaToday && isBladeTeam(t.worktype, []))) continue;
+    const slots = [];
+    for (const m of t.members) {
+      if (m.struck) continue;
+      if (isOutsider(m.display) || t.painter) { slots.push({ fixed:m.display }); continue; }
+      if (!m.person) { slots.push({ name:"", why:`原本是 ${m.display},對不上總表`, kind:"gap" }); continue; }
+      const a = roster.avail(m.person, target);
+      if (excluded.has(m.person.name.toLowerCase()))
+        slots.push({ name:"", why:`原本是 ${m.person.name},設定裡排除`, kind:"gap" });
+      else if (a.ok) { slots.push({ name:m.person.name, why: fromFile ? "檔案裡已排" : "沿用基準日", kind:"kept" });
+                       used.add(m.person.name); }
+      else slots.push({ name:"", why:`原本是 ${m.person.name},${a.why}`, kind:"gap" });
+    }
+    teams.push({ name:t.name, vessel:t.vessel, worktype:t.worktype, night:t.night,
+                 painter:t.painter, slots });
+  }
+  const tswaLeft = autoFill(teams, roster, target, S, used);
+  return { target, base, teams, zoneNote, fromFile, tswaLeft,
+           // 以檔案自己的內容起頭時,「上一輪漏掉誰」這個問題不成立,漏排的人由檢核的差額去講
+           returning: fromFile ? [] : returningPeople(plan, roster, base, target) };
+}
+
+function autoFill(teams, roster, target, S, used) {
+  const excluded = new Set((S.exclude||[]).map(x => x.toLowerCase()));
+  const order = S.leader_order || [], ot = S.overtime || {};
+  const avoid = new Set((S.avoid_pairs||[]).map(p => [...p].sort().join(" ")));
+  const pool = roster.people.filter(p =>          // cat "support" 不自動補,要由人自己挑
+    roster.avail(p,target).cat === "available" && !excluded.has(p.name.toLowerCase()));
+  const rank = p => [order.indexOf(p.name) < 0 ? 999 : order.indexOf(p.name),
+                     ({yes:0,maybe:1,no:2})[ot[p.name]] ?? 1, p.name];
+  const sorted = [...pool].sort((a,b) => {
+    const x = rank(a), y = rank(b);
+    return x[0]-y[0] || x[1]-y[1] || (x[2] < y[2] ? -1 : 1);
+  });
+
+  for (const team of teams) {
+    if (team.painter) continue;                    // [T] Snail 3 / Paint 完全不套用規則
+    const isHV = (team.worktype||"").toUpperCase() === "HV";
+    const lv = n => { const p = n && roster.byName.get(n); return p ? p.level.toUpperCase() : ""; };
+    const names = () => new Set(team.slots.filter(s => s.name).map(s => s.name));
+    const okAvoid = (name, cur) =>
+      ![...cur].some(n => avoid.has([name, n].sort().join(" ")));
+    /* [U] TSWA 只進葉片組、葉片組只收 TSWA —— 補人前先過這一關 */
+    const blade = isBladeTeam(team.worktype, team.slots.filter(s => s.name).map(s => lv(s.name)));
+    const fitTeam = p => isBladeLevel(p.level) === blade;
+
+    /* 填進一個空缺 */
+    const take = (pred, why) => {
+      const cur = names();
+      for (const p of sorted) {
+        if (used.has(p.name) || !fitTeam(p) || !pred(p) || !okAvoid(p.name, cur)) continue;
+        const slot = team.slots.find(s => s.kind === "gap" && !s.name);
+        if (!slot) return null;
+        slot.name = p.name; slot.why = why; slot.kind = "auto";
+        used.add(p.name);
+        return p;
+      }
+      return null;
+    };
+    /* 沒有空缺可用時,換掉最後面那一位隊員 */
+    const swapIn = (pred, why) => {
+      const cur = names();
+      const cand = sorted.find(p => !used.has(p.name) && fitTeam(p) && pred(p) && okAvoid(p.name, cur));
+      if (!cand) return null;
+      let i = team.slots.length - 1;
+      while (i > 0 && (team.slots[i].fixed || !team.slots[i].name)) i--;
+      if (i <= 0) return null;
+      const outName = team.slots[i].name;
+      if (outName) used.delete(outName);
+      team.slots[i] = { name: cand.name, kind: "auto",
+                        why: outName ? `換掉 ${outName},${why}` : why };
+      used.add(cand.name);
+      return cand;
+    };
+    /* 先填空缺,填不到再換人 */
+    const ensure = (pred, why) => take(pred, why) || swapIn(pred, why);
+
+    const hasGap = () => team.slots.some(s => s.kind === "gap" && !s.name);
+
+    if (blade) {
+      /* 葉片組:只補 TSWA、沒有隊長編制。兩隊怎麼分、成不成雙,由後面的「TSWA 整組平衡」統一處理 */
+      while (hasGap()) if (!take(() => true, "補足人數(TSWA)")) break;
+      continue;
+    }
+
+    if (hasGap()) {
+      for (const [a,b] of (S.bind_pairs||[])) {
+        const cur = names();
+        if (cur.has(a) && !cur.has(b)) take(p => p.name === b, `與 ${a} 綁定`);
+        else if (cur.has(b) && !cur.has(a)) take(p => p.name === a, `與 ${b} 綁定`);
+      }
+    }
+
+    const hasEuro = isHV && team.slots.some(s => lv(s.name) === R.EURO_LEVEL);
+    const leaderOk = p => hasEuro ? R.HV_LEADER.includes(p.level.toUpperCase())
+                                  : roster.canLead(p);
+
+    /* [T] 2026-09-08 Tina 確認:一定要有 TS 或 MT 帶隊,不分主力隊或承攬商隊。
+       所以隊上沒有隊長級時,沒有空缺也要換一個人進來,不要留給人工去發現。 */
+    if (!team.slots.some(s => { const p = s.name && roster.byName.get(s.name);
+                                return p && leaderOk(p); }))
+      ensure(leaderOk, hasEuro ? "補 HV 隊長(TSF / MTF)" : "隊上要有隊長");
+
+    // 有歐洲技師就一定要搭一個 CT 或 BT
+    if (hasEuro && !team.slots.some(s => R.HV_ASSIST.includes(lv(s.name))))
+      ensure(p => R.HV_ASSIST.includes(p.level.toUpperCase()), "HV 隊要搭 CT / BT");
+
+    while (hasGap()) if (!take(() => true, "補足人數")) break;
+
+    /* 隊長排在名單第一位 —— 檢核是看第一個人,現場也是這樣讀 */
+    const idx = team.slots.findIndex(s => {
+      const p = s.name && roster.byName.get(s.name);
+      return p && leaderOk(p);
+    });
+    const first = team.slots[0] && team.slots[0].name && roster.byName.get(team.slots[0].name);
+    if (idx > 0 && (!first || !leaderOk(first))) {
+      const t0 = team.slots[0];
+      team.slots[0] = team.slots[idx];
+      team.slots[idx] = t0;
+      team.slots[0].why = (team.slots[0].why || "") + "・調到隊長位";
+    }
+  }
+
+  /* ---- TSWA 整組平衡 ----
+     [U] 2026-09-12 Tina:TSWA 正常 8 位,分兩隊、同進同出,每隊固定偶數,是很特別的隊伍。
+     所以不是一隊一隊各補各的,而是把「今天可出海的 TSWA」整組拿來,兩隊平分、每隊都成雙:
+       8 → 4+4、6 → 4+2、4 → 2+2、2 → 2+0;奇數就有一位排不進去,留在畫面上讓人決定。
+     原本就在葉片組的人盡量留在原隊,只挪多出來或補進來的人。
+     落單在別隊的 TSWA(那一隊只有他一個)一律收回來 —— 那多半是換班日的寫法,不是刻意的;
+     兩兩一組跟著 TS/MT 出海的(偶數)就不動。 */
+  const lvOf = n => { const p = n && roster.byName.get(n); return p ? p.level.toUpperCase() : ""; };
+  const isTswaSlot = x => x.name && isBladeLevel(lvOf(x.name));
+  let bladeTeams = teams.filter(t => !t.painter && isBladeTeam(t.worktype, []));   // 先認工作類型 Fan / Blade
+  if (!bladeTeams.length)
+    bladeTeams = teams.filter(t => !t.painter &&
+      isBladeTeam(t.worktype, t.slots.filter(x => x.name).map(x => lvOf(x.name))));
+  const tswaLeft = [];
+  if (bladeTeams.length >= 2) {
+    const keptBy = bladeTeams.map(t => t.slots.filter(x => isTswaSlot(x) && x.kind === "kept"));
+    const extras = [];
+    for (const t of bladeTeams)
+      for (const x of t.slots) if (isTswaSlot(x) && x.kind !== "kept") extras.push(x);
+    for (const t of teams) {                       // 別隊落單的 TSWA 收回來
+      if (bladeTeams.includes(t) || t.painter) continue;
+      const mine = t.slots.filter(isTswaSlot);
+      if (mine.length % 2 === 1) {
+        for (const x of mine) { extras.push({ name:x.name, kind:"auto", why:`從 ${t.name} 收回葉片組` });
+                                x.name = ""; x.kind = "gap"; x.why = "TSWA 收回葉片組"; }
+      }
+    }
+    for (const p of sorted)
+      if (isBladeLevel(p.level) && !used.has(p.name)) {
+        extras.push({ name:p.name, kind:"auto", why:"葉片組整組出海" }); used.add(p.name);
+      }
+    const T = keptBy.reduce((n,k) => n + k.length, 0) + extras.length;
+    const usable = T - (T % 2), half = usable / 2;
+    const sizes = [half % 2 === 0 ? half : half + 1, half % 2 === 0 ? half : half - 1];
+    // 每隊先留自己原本的人,超出的擠到 extras 前面(優先分給另一隊)
+    const plan2 = bladeTeams.map((t, k) => {
+      const want = k < 2 ? sizes[k] : 0;
+      const keep = keptBy[k].slice(0, want);
+      extras.unshift(...keptBy[k].slice(want));
+      return { t, want, keep };
+    });
+    for (const pl of plan2)
+      while (pl.keep.length < pl.want && extras.length) pl.keep.push(extras.shift());
+    for (const pl of plan2) {
+      const others = pl.t.slots.filter(x => x.fixed || (x.name && !isBladeLevel(lvOf(x.name))));
+      pl.t.slots = others.concat(pl.keep.map(x => ({ name:x.name, kind:x.kind, why:x.why })));
+    }
+    for (const x of extras) { used.delete(x.name); tswaLeft.push(x.name); }   // 奇數多出來的那一位
+  }
+
+  /* ---- 借調 ----
+     [T] Tina 確認每一隊都要有 TS 或 MT 帶隊,所以上面補不到人時不能就這樣算了。
+     實測 9/20 有一隊掛了三個隊長級,另外兩隊一個都沒有 —— 這種就是調過去而不是加班。
+     做法是「對調」:把多的隊長換過去,把那邊的隊員換回來,兩隊人數都不變。 */
+  const byName = n => (n && roster.byName.get(n)) || null;
+  const leaderTest = t => {
+    const isHV = (t.worktype||"").toUpperCase() === "HV";
+    const hasEuro = isHV && t.slots.some(s => {
+      const p = byName(s.name); return p && p.level.toUpperCase() === R.EURO_LEVEL; });
+    return p => hasEuro ? R.HV_LEADER.includes(p.level.toUpperCase()) : roster.canLead(p);
+  };
+  const teamNames = t => new Set(t.slots.filter(s => s.name).map(s => s.name));
+  const fits = (name, t) => ![...teamNames(t)]
+    .some(n => n !== name && avoid.has([name, n].sort().join(" ")));
+  const bladeT = t => isBladeTeam(t.worktype,
+    t.slots.filter(s => s.name).map(s => (byName(s.name)||{level:""}).level));
+
+  for (const need of teams) {
+    if (need.painter || bladeT(need) || !need.slots.some(s => s.name)) continue;   // 葉片組不需要隊長
+    const okN = leaderTest(need);
+    if (need.slots.some(s => { const p = byName(s.name); return p && okN(p); })) continue;
+
+    let done = false;
+    for (const donor of teams) {
+      if (done || donor === need || donor.painter || bladeT(donor)) continue;
+      const okD = leaderTest(donor);
+      const leads = donor.slots.filter(s => { const p = byName(s.name); return p && okD(p); });
+      if (leads.length < 2) continue;                       // 只有一個就不能借
+
+      for (const give of leads.slice(1)) {
+        const gp = byName(give.name);
+        if (!gp || !okN(gp) || !fits(gp.name, need)) continue;
+        const gap = need.slots.find(s => !s.name && !s.fixed);
+        if (gap) {                                           // 那邊有空缺,直接補過去
+          gap.name = gp.name; gap.kind = "auto";
+          gap.why = `從 ${donor.name} 借調過來當隊長`;
+          give.name = ""; give.kind = "gap"; give.why = `借給 ${need.name} 當隊長`;
+          // 借出的那一隊缺一個人,從還沒排到的人裡面補回來
+          const back = sorted.find(q => !used.has(q.name) && !isBladeLevel(q.level) && fits(q.name, donor));
+          if (back) { give.name = back.name; give.kind = "auto";
+                      give.why = `補上借給 ${need.name} 的缺`; used.add(back.name); }
+        } else {                                             // 沒空缺就對調,兩隊人數不變
+          let i = need.slots.length - 1;
+          while (i > 0 && (need.slots[i].fixed || !need.slots[i].name)) i--;
+          if (i <= 0) continue;
+          const back = need.slots[i].name;
+          if (!fits(back, donor)) continue;
+          need.slots[i] = { name: gp.name, kind:"auto",
+                            why: `從 ${donor.name} 借調過來當隊長(${back} 換過去)` };
+          give.name = back; give.kind = "auto"; give.why = `與 ${need.name} 對調`;
+        }
+        // 借來的隊長排到第一位
+        const k = need.slots.findIndex(s => s.name === gp.name);
+        if (k > 0) { const t0 = need.slots[0]; need.slots[0] = need.slots[k]; need.slots[k] = t0; }
+        done = true;
+        break;
+      }
+    }
+  }
+  return tswaLeft;
+}
+
+/* ================================================================= 介面 */
+const $ = s => document.querySelector(s);
+const el = (t,c,h) => { const e = document.createElement(t); if (c) e.className = c;
+  if (h !== undefined) e.innerHTML = h; return e; };
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c =>
+  ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
+const IN_ARTIFACT = typeof window !== "undefined" && !!window.claude;
+
+let ROSTER=null, PLAN=null, DAY=null, S={...DEFAULTS}, CAND=null;
+let ROSTER_INFO={}, PLAN_INFO={}, DRAFT=null, LAST=null, NOTES=[];
+let dateCombo=null, baseCombo=null, ALLDATES=[], PRE=null;
+/* [U] 做好的草稿要留著:切到別的日期再切回來,原本改好的內容不能不見。
+   一份草稿 = 一天,鍵就是日期。整個工具只有這一個草稿倉庫,
+   「下兩輪」那一頁和「排班」那一頁看的是同一份資料,所以在哪邊改都一致。 */
+const DRAFTS = new Map();
+
+const SKEY = "yunlin-settings-v1", NKEY = "yunlin-notes-v1";
+function loadLocal(){
+  try { const r = localStorage.getItem(SKEY); if (r) S = { ...DEFAULTS, ...JSON.parse(r) }; } catch(_) {}
+  try { const r = localStorage.getItem(NKEY); if (r) NOTES = JSON.parse(r) || []; } catch(_) {}
+}
+function saveS(){ try { localStorage.setItem(SKEY, JSON.stringify(S)); } catch(_) {} }
+function saveN(){ try { localStorage.setItem(NKEY, JSON.stringify(NOTES)); } catch(_) {} }
+
+/* ---------- 搜尋式下拉 ---------- */
+function combo(cfg) {
+  const box = el("div","cb");
+  if (cfg.width) box.style.width = cfg.width;
+  const inp = el("input");
+  inp.placeholder = cfg.placeholder || "輸入以搜尋…";
+  inp.value = cfg.value || "";
+  inp.autocomplete = "off";
+  box.append(inp, el("span","arrow","▼"));
+  box._label = cfg.value || "";
+  let list = null, cur = -1, shown = [], showAll = false;
+
+  const close = () => { if (list) { list.remove(); list = null; cur = -1; } };
+  const render = () => {
+    // 剛點進來時先列出全部,不要拿目前已選的名字去篩 —— 否則永遠只看得到自己
+    const q = showAll ? "" : clean(inp.value);
+    const rows = [];
+    for (const o of cfg.options()) {
+      if (o.head) { rows.push(o); continue; }
+      const hay = clean(o.label + " " + (o.lv||"") + " " + (o.sub||""));
+      if (!q || hay.includes(q)) rows.push(o);
+    }
+    // 丟掉底下已經沒有項目的標題
+    const kept = rows.filter((o,i) => {
+      if (!o.head) return true;
+      for (let j = i+1; j < rows.length; j++) { if (rows[j].head) break; return true; }
+      return false;
+    });
+    shown = kept.filter(o => !o.head);
+    close();
+    list = el("div","list");
+    if (!shown.length) list.append(el("div","none","找不到符合的人"));
+    kept.forEach(o => {
+      if (o.head) { list.append(el("div","hd", esc(o.label))); return; }
+      const d = el("div","opt",
+        `<span>${esc(o.label)}</span>` +
+        (o.lv ? `<span class="lv">${esc(o.lv)}</span>` : "") +
+        (o.sub ? `<span class="sub">${esc(o.sub)}</span>` : ""));
+      d.dataset.v = o.value;
+      d.onmousedown = e => { e.preventDefault(); pick(o); };
+      list.append(d);
+    });
+    box.append(list);
+  };
+  const pick = o => { box._label = o.label; inp.value = o.label; close(); cfg.onChange(o.value, o); };
+  const move = n => {
+    if (!list) return;
+    const opts = [...list.querySelectorAll(".opt")];
+    if (!opts.length) return;
+    cur = Math.max(0, Math.min(opts.length-1, cur + n));
+    opts.forEach(o => o.classList.remove("cur"));
+    opts[cur].classList.add("cur");
+    opts[cur].scrollIntoView({ block:"nearest" });
+  };
+  inp.onfocus = () => { showAll = true; inp.select(); render(); };
+  inp.oninput = () => { showAll = false; cur = -1; render(); };
+  inp.onkeydown = e => {
+    if (e.key === "ArrowDown") { e.preventDefault(); if (!list) render(); move(1); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); move(-1); }
+    else if (e.key === "Enter") {
+      e.preventDefault();
+      const opts = list ? [...list.querySelectorAll(".opt")] : [];
+      if (cur >= 0 && opts[cur]) { const o = shown.find(x => String(x.value) === opts[cur].dataset.v);
+        if (o) pick(o); }
+      else if (shown.length === 1) pick(shown[0]);
+    } else if (e.key === "Escape") { close(); inp.blur(); }
+  };
+  inp.onblur = () => setTimeout(() => {
+    close();
+    const typed = inp.value.trim();
+    if (!typed && cfg.allowEmpty && box._label) { box._label = ""; cfg.onChange("", null); }
+    else inp.value = box._label;                 // 沒選就還原,不留半截字
+  }, 130);
+  box.setValue = label => { box._label = label || ""; inp.value = label || ""; };
+  return box;
+}
+
+/* ---------- 開檔 ---------- */
+const prog = m => $("#prog").textContent = m;
+
+async function handleFiles(files) {
+  const picked = [...files].filter(f => f.name.toLowerCase().endsWith(".xlsx") && !f.name.startsWith("~$"));
+  if (!picked.length) { prog("請選 .xlsx 檔案。"); return; }
+  if (!("DecompressionStream" in window)) {
+    $("#startwarn").classList.remove("hide");
+    $("#startwarn").textContent = "這個瀏覽器太舊,無法解開 Excel 檔。請用 Edge 或 Chrome 開啟。";
+    return;
+  }
+  try {
+    for (const f of picked) {
+      prog(`開啟 ${f.name}…`);
+      const book = await Book.open(f, prog);
+      const isPlan = book.sheetNames.some(n => n.toLowerCase().includes("daily ops"));
+      const isRoster = book.sheetNames.some(n => /^allowance/i.test(n));
+      if (!isPlan && !isRoster) { prog(`${f.name} 看起來不是這兩份檔案,略過。`); continue; }
+      await book.prepare(prog);
+      if (isPlan) {
+        PLAN = await Plan.build(book, prog);
+        PLAN_INFO = { file:f.name, sheet:PLAN.sheetName };
+        $("#d2").classList.add("on");
+        $("#n2").textContent = `每日出海計畫　${f.name} · ${PLAN.sheetName} · ${PLAN.dates.length} 天`;
+      } else {
+        ROSTER = await Roster.build(book, prog);
+        ROSTER_INFO = { file:f.name, sheet:ROSTER.sheetName };
+        $("#d1").classList.add("on");
+        $("#n1").textContent = `人力總表　${f.name} · ${ROSTER.sheetName} · ${ROSTER.people.length} 人`;
+      }
+    }
+  } catch (e) {
+    prog("");
+    $("#startwarn").classList.remove("hide");
+    $("#startwarn").textContent = "讀取失敗:" + e.message;
+    return;
+  }
+  if (ROSTER && PLAN) { prog("讀好了,正在開啟…"); setTimeout(startApp, 60); }
+  else prog("還缺一個檔案,再把另一個拖進來就好。");
+}
+
+function startApp() {
+  $("#start").classList.add("hide");
+  $("#app").classList.remove("hide");
+  $("#files").innerHTML =
+    `<b>${esc(ROSTER_INFO.file)}</b> · ${esc(ROSTER_INFO.sheet)} · ${ROSTER.people.length} 人` +
+    (ROSTER.hiddenPeople.length ? `(另有 ${ROSTER.hiddenPeople.length} 位隱藏,已排除)` : "") +
+    `　　<b>${esc(PLAN_INFO.file)}</b> · ${esc(PLAN_INFO.sheet)} · ${PLAN.dates.length} 天 ` +
+    `(${PLAN.dates[0]} ~ ${PLAN.dates[PLAN.dates.length-1]})`;
+  /* 出海計畫寫到 2026-09-14,但總表的日期欄一路到 2027-01-28。
+     只列計畫有的日子,就永遠排不了「還沒建立的那一天」—— 而那才是最常要排的。 */
+  const lastPlan = PLAN.dates[PLAN.dates.length-1];
+  const extra = [...ROSTER.dateCol.keys()].filter(d => d > lastPlan).sort();
+  ALLDATES = PLAN.dates.concat(extra);
+  const NEWDAYS = new Set(extra);
+  const today = new Date().toISOString().slice(0,10);
+  DAY = ALLDATES.includes(today) ? today : lastPlan;
+  const dateOpts = () => ALLDATES.map(d =>
+    ({ value:d, label:d,
+       sub: DRAFTS.has(d) ? "已有草稿" : (NEWDAYS.has(d) ? "計畫尚未建立" : "") }));
+  dateCombo = combo({ value:DAY, options:dateOpts, placeholder:"日期", width:"130px",
+    onChange: v => { if (v) { DAY = v; loadDay(); } } });
+  $("#dateCb").replaceChildren(dateCombo);
+  /* 基準日可以是出海計畫裡的日子,也可以是這個畫面上已經做好的草稿 ——
+     出海計畫只寫到 9/14,不開放草稿就永遠沒辦法讓 9/16 參考 9/15。 */
+  baseCombo = combo({ value:"", placeholder:"自動(檔案有排就照檔案,否則上一輪)", width:"235px", allowEmpty:true,
+    options: () => [...DRAFTS.keys()].sort().reverse()
+        .filter(d => d !== DAY)
+        .map(d => ({ value:d, label:d, sub:"畫面上的草稿" }))
+      .concat(PLAN.dates.map(d => ({ value:d, label:d }))),
+    onChange: v => { baseCombo._pick = v; } });
+  $("#baseCb").replaceChildren(baseCombo);
+  loadDay();
+  buildAhead();          // 讀完檔就先把下兩輪長出來(實測 14 天約 30 毫秒)
+}
+
+/* ---------- 下兩輪 ----------
+   從出海計畫最後一天的隔天起算 14 天。做 7 休 7、星期二換班,
+   所以 14 天剛好是兩個完整梯次。 */
+function buildAhead(force) {
+  const last = PLAN.dates[PLAN.dates.length - 1];
+  const days = [];
+  for (let i = 1; i <= 14; i++) {
+    const d = addDays(last, i);
+    if (!ROSTER.dateCol.has(d)) break;          // 總表還沒排到那麼遠就停
+    if (!force && DRAFTS.has(d)) { days.push(d); continue; }   // 改過的不覆蓋
+    const draft = buildDraft(PLAN, ROSTER, d, S, null);
+    if (draft.error) continue;
+    DRAFTS.set(d, draft);
+    days.push(d);
+  }
+  PRE = { from: days[0] || "", to: days[days.length-1] || "", days };
+  renderAhead();
+}
+
+const WD = ["日","一","二","三","四","五","六"];
+
+function renderAhead() {
+  const box = $("#aheadBody");
+  box.innerHTML = "";
+  if (!PRE || !PRE.days.length) {
+    box.innerHTML = `<div class="issue info">產不出下兩輪 —— 通常是人力總表還沒填到那些日期。</div>`;
+    $("#abadge").classList.add("hide");
+    return;
+  }
+  let totalRed = 0, totalWarn = 0;
+  const rows = PRE.days.filter(d => DRAFTS.has(d)).map(date => {
+    const draft = DRAFTS.get(date);
+    const ev = evaluate(teamsFromDraft(draft, ROSTER), ROSTER, date, S);
+    totalRed += ev.summary.stop; totalWarn += ev.summary.warn;
+    return { date, draft, ev };
+  });
+
+  const head = el("div","note");
+  head.innerHTML = `<b>已經先幫你長好 ${PRE.from} ~ ${PRE.to} 共 ${rows.length} 天。</b>
+    這是照每一天「上一輪同一天」的班表推出來的草稿,還沒寫進任何檔案。
+    點右邊的<b>開啟</b>可以改人 —— 改完切到別天再切回來,內容都會留著。
+    上面的按鈕會把<b>目前做好的 ${DRAFTS.size} 份草稿</b>一次寫進一個新的 Excel。`;
+  box.append(head);
+
+  for (let w = 0; w < 2; w++) {
+    const part = rows.slice(w*7, w*7+7);
+    if (!part.length) continue;
+    const sec = el("div","wk");
+    const red = part.reduce((n,x)=>n+x.ev.summary.stop,0);
+    const wrn = part.reduce((n,x)=>n+x.ev.summary.warn,0);
+    sec.append(el("h3","",
+      `<span>第 ${w+1} 輪　${part[0].date} ~ ${part[part.length-1].date}</span>` +
+      `<span class="sub">要處理 ${red} 則・提醒 ${wrn} 則</span>`));
+    sec.append(el("div","dayrow head",
+      `<span>日期</span><span>基準日 / 新回來的人</span>` +
+      `<span class="n">隊伍</span><span class="n">已排</span>` +
+      `<span class="n">可出海</span><span class="n">要處理</span><span></span>`));
+    for (const x of part) {
+      const s2 = x.ev.summary;
+      const cls = s2.stop ? "bad" : (s2.warn ? "warnrow" : "okrow");
+      const row = el("div","dayrow " + cls);
+      row.append(el("span","d", `${x.date}<span>週${WD[new Date(x.date+"T00:00:00Z").getUTCDay()]}</span>`));
+      row.append(el("span","info",
+        `基準 ${x.draft.base}` +
+        (x.draft.returning.length ? `　新回來 ${x.draft.returning.length} 位:` +
+          esc(x.draft.returning.slice(0,3).map(p=>p.name).join("、")) : "")));
+      row.append(el("span","n", String(x.draft.teams.length)));
+      row.append(el("span","n", String(s2.scheduled)));
+      row.append(el("span","n" + (s2.diff===0?" ok":""), String(s2.should)));
+      row.append(el("span","n" + (s2.stop?" bad":(s2.warn?" wr":" ok")),
+        s2.stop ? String(s2.stop) : (s2.warn ? s2.warn + " 提醒" : "OK")));
+      const open = el("button","btn ghost sm","開啟");
+      open.onclick = () => {
+        DAY = x.date; dateCombo.setValue(DAY);
+        loadDay();                 // 草稿由 loadDay 從 DRAFTS 取回,改過的內容會留著
+        tab("plan");
+      };
+      row.append(open);
+      sec.append(row);
+    }
+    box.append(sec);
+  }
+  const b = $("#abadge");
+  b.textContent = totalRed;
+  b.classList.toggle("hide", !totalRed);
+}
+
+function tab(name) {
+  document.querySelectorAll(".nav button").forEach(b => b.classList.toggle("on", b.dataset.tab === name));
+  ["overview","plan","ahead","issues","settings","notes"].forEach(t =>
+    $("#tab-"+t).classList.toggle("hide", t !== name));
+  if (name === "settings" && !CAND) buildSettings();
+  if (name === "notes") buildNotes();
+  if (name === "ahead" && PRE) renderAhead();     // 草稿可能被改過,重算一次
+}
+
+function loadDay() {
+  $("#err").classList.add("hide");
+  let teams, r;
+  try { teams = teamsFromPlan(PLAN, ROSTER, DAY); r = evaluate(teams, ROSTER, DAY, S); }
+  catch (e) { $("#err").classList.remove("hide"); $("#err").textContent = e.message; return; }
+  LAST = r;
+  renderStats(r);
+  const noPlan = !PLAN.days.has(DAY);
+  $("#wnote").innerHTML = noPlan
+    ? `<div class="note"><b>出海計畫還沒有 ${esc(DAY)} 這一天。</b>
+       上面的「總表可出海」還是算得出來,可以直接到<b>排班</b>分頁按「一鍵產生草稿」,
+       它會照上一輪同一天的隊伍結構幫你開一份。</div>`
+    : r.zone === "weather_off"
+    ? `<div class="note">這一天總表全員留在岸上、沒有人標 OF,判定為<b>天氣取消</b>。
+       班表本來就會先排人,取消時只畫刪除線或註記 WOW,所以不做人數比對。</div>` : "";
+  $("#teams").innerHTML = "";
+  if (noPlan) $("#teams").innerHTML =
+    `<div class="issue info">這一天在出海計畫裡還沒有任何隊伍。</div>`;
+  teams.filter(t => t.members.length || (t.turbines && t.turbines.length))
+       .forEach(t => $("#teams").append(planCard(t, r)));
+  renderIssues($("#issues"), r.issues);
+  const b = $("#ibadge");
+  b.textContent = r.summary.stop;
+  b.classList.toggle("hide", !r.summary.stop);
+  renderUnsched(r);
+  $("#copybox").classList.add("hide");
+  if (baseCombo) { baseCombo.setValue(""); baseCombo._pick = ""; }   // 換日期就不要沿用上一天挑的基準日
+  /* [U] 切到別天再切回來,原本做好的草稿要原封不動地還在 */
+  DRAFT = DRAFTS.get(DAY) || null;
+  if (DRAFT) {
+    $("#gmsg").textContent = (DRAFT.fromFile ? `照檔案裡 ${DRAFT.base} 的內容` : `基準日 ${DRAFT.base}`) + "(已儲存的草稿)";
+    $("#gmsg").classList.remove("hide");
+    showReturning(DRAFT);
+    renderDraft();
+  } else {
+    $("#dteams").innerHTML =
+      `<div class="issue info">按上面的「一鍵產生草稿」,產生後每個位子都可以直接換人。</div>`;
+    $("#returning").innerHTML = ""; $("#livebar").innerHTML = "";
+    $("#livebar").classList.add("hide");
+    $("#draftIssues").innerHTML = `<div style="color:var(--ink-3)">還沒產生草稿。</div>`;
+    $("#gmsg").classList.add("hide");
+  }
+}
+
+function renderStats(r) {
+  const s = r.summary;
+  const zh = { plan:"未來計畫", history:"已發生", weather_off:"天氣取消", missing:"總表沒有這天" };
+  $("#stats").innerHTML = "";
+  [[s.teams,"隊伍",""],[s.scheduled,"班表已排",""],[s.should,"總表可出海",""],
+   [(s.diff>0?"+":"")+s.diff,"差額", s.diff===0?"good":"hi"],
+   [s.stop,"要處理", s.stop?"bad":"good"],[s.warn,"提醒",""],
+   [zh[r.zone]||r.zone,"總表狀態",""]].forEach(([v,l,c]) =>
+    $("#stats").append(el("div","stat "+(c||""), `<div class="v">${esc(v)}</div><div class="l">${l}</div>`)));
+}
+
+function renderIssues(host, issues) {
+  host.innerHTML = issues.length ? "" : `<div class="issue info">沒有查到問題。</div>`;
+  issues.forEach(i => host.append(el("div","issue "+i.level,
+    `<div><span class="lvl">${({stop:"要處理",warn:"提醒",info:"說明"})[i.level]||i.level}</span>${esc(i.msg)}</div>` +
+    (i.fix ? `<div class="fix">${esc(i.fix)}</div>` : ""))));
+}
+
+function renderUnsched(r) {
+  $("#unsched").innerHTML = "";
+  r.unschedulable.forEach(g => {
+    const names = g.people.map(p =>
+      `<span class="p">${esc(p.name)}<span class="lv"> ${esc(p.level)}</span></span>`).join("");
+    const body = el("div","pl", g.minor ? "" : names);
+    const head = el("div","gh",
+      `<span>${esc(g.why)}${g.minor ? "(不在這一輪)" : ""}</span><span class="c">${g.people.length}</span>`);
+    if (g.minor) {
+      head.style.cursor = "pointer";
+      const t = el("span","c"," 展開");
+      head.firstChild.after(t);
+      head.onclick = () => { const open = body.innerHTML !== "";
+        body.innerHTML = open ? "" : names; t.textContent = open ? " 展開" : " 收合"; };
+    }
+    const d = el("div","grp"); d.append(head, body); $("#unsched").append(d);
+  });
+}
+
+function teamTags(t, seats) {
+  const tags = [];
+  if (t.worktype) {
+    const w = workLabel(t.worktype);
+    tags.push(`<span class="tag wt">${esc(w.raw)}${w.zh ? " · " + esc(w.zh) : ""}</span>`);
+  }
+  if (t.night) tags.push(`<span class="tag n">夜班</span>`);
+  if (t.painter) tags.push(`<span class="tag p">painter · 佔 ${R.PAINTER_SEATS} 席,不套用規則</span>`);
+  tags.push(`<span class="tag${seats > (S.vessel_capacity ?? 12) ? " full":""}">船位 ${seats}</span>`);
+  return tags.join("");
+}
+
+/* 機組標籤:點一下展開那支機組的故障描述 */
+function turbineRow(t, prefix) {
+  if (!t.turbines || !t.turbines.length) return null;
+  const wrap = el("div","turbs");
+  if (prefix) wrap.append(el("span","lbl", prefix));
+  else wrap.append(el("span","lbl","機組"));
+  const panel = el("div","faults hide");
+  let openId = null;
+  t.turbines.forEach(g => {
+    const chip = el("button","turb",
+      `${esc(g.id)}${g.items.length > 1 ? `<span class="n">${g.items.length}</span>` : ""}`);
+    chip.onclick = () => {
+      if (openId === g.id) { openId = null; panel.classList.add("hide");
+        wrap.querySelectorAll(".turb").forEach(x => x.classList.remove("on")); return; }
+      openId = g.id;
+      wrap.querySelectorAll(".turb").forEach(x => x.classList.remove("on"));
+      chip.classList.add("on");
+      panel.classList.remove("hide");
+      panel.innerHTML = `<div class="fh">${esc(g.id)}</div><ul>` + g.items.map(w => {
+        const meta = [w.caseId && "ATS " + w.caseId, w.err && w.err !== "0" && "Error " + w.err,
+                      w.ptw && "PTW " + w.ptw, w.so && "SO " + w.so].filter(Boolean).join("　");
+        return `<li>${esc(w.fault || "(沒有填故障描述)")}` +
+               (meta ? `<br><span class="meta">${esc(meta)}</span>` : "") + `</li>`;
+      }).join("") + `</ul>`;
+    };
+    wrap.append(chip);
+  });
+  const box = el("div");
+  box.append(wrap, panel);
+  return box;
+}
+
+function planCard(t, r) {
+  const c = el("div","team" + (t.night?" night":"") + (t.painter?" painter":"") +
+                  (r.badTeams.has(t.name)?" bad":""));
+  c.append(el("div","th", `<span class="tn">${esc(t.name)}</span><span class="tv">${esc(t.vessel)}</span>`));
+  // 「核對人數」要跟檢核用的一樣:隱藏的人和 FMS/HL 不算
+  const crewN = counted(t).filter(m => !(m.person &&
+    (m.person.hidden || ((r.avail.get(m.person.name)||{}).cat === "away")))).length;
+  c.append(el("div","tags", teamTags(t, seatsOf(t)) +
+    (t.painter ? "" : `<span class="tag">核對 ${crewN} 人</span>`)));
+  t.members.forEach(m => {
+    const lv = memberLevel(m);
+    c.append(el("div", "mem" + (m.struck?" struck":"") + (m.outsider?" out":"") +
+      (!m.person && !m.outsider ? " unmatched" : ""),
+      (m.prefix ? `<span class="lv">${m.prefix}</span>` : "") +
+      `<span class="nm">${esc(m.display)}</span>` +
+      (lv ? `<span class="lv">${esc(lv)}</span>` : "") +
+      (m.struck ? `<span class="lv">取消</span>` : "") +
+      (m.outsider ? `<span class="lv">外部</span>` : "") +
+      (isSupportMember(m) ? `<span class="lv">岸上職務,支援出海</span>` : "") +
+      (m.person && m.person.hidden ? `<span class="lv">總表已隱藏,不列入</span>` : "") +
+      (!m.person && !m.outsider ? `<span class="lv">名字待對應</span>` : "")));
+  });
+  if (!t.members.length)
+    c.append(el("div","gap","這一隊有工作,但還沒排任何人"));
+  const tr = turbineRow(t);
+  if (tr) c.append(tr);
+  if (t.comment) c.append(el("div","cmt", esc(t.comment)));
+  return c;
+}
+
+/* ---------- 草稿 ---------- */
+function genDraft() {
+  const d = buildDraft(PLAN, ROSTER, DAY, S, baseCombo._pick || null);
+  if (d.error) { $("#err").classList.remove("hide"); $("#err").textContent = d.error; return; }
+  DRAFT = d;
+  DRAFTS.set(DAY, d);              // 存起來,切走再切回來還在
+  $("#gmsg").textContent = d.fromFile ? `照檔案裡 ${d.base} 已排的內容` : `基準日 ${d.base}`;
+  $("#gmsg").classList.remove("hide");
+  showReturning(d);
+  renderDraft();
+}
+
+const draftEval = () => evaluate(teamsFromDraft(DRAFT, ROSTER), ROSTER, DRAFT.target, S);
+
+function showReturning(d) {
+  $("#returning").innerHTML = d.fromFile
+    ? `<div class="note" style="background:var(--navy-soft);border-left-color:var(--navy)">
+       <b>這份草稿是照出海計畫裡 ${esc(d.target)} 已經排好的內容起頭的。</b>
+       只把總表說當天不能出海的人挖掉、缺的補上;AOC 原本排好的人一個都沒動。
+       想改成照上一輪重排,基準日那裡自己選一天再按一次。</div>`
+    : d.returning.length
+    ? `<div class="note"><b>這一輪回來上班、但基準日那一輪整輪都沒被排到的人有 ${d.returning.length} 位:</b>
+       ${d.returning.map(p => esc(p.name)+"("+esc(p.level)+")").join("、")}
+       <br>複製上一輪的班表時最容易漏掉的就是這些人 —— Jimmy Hsu 就是這樣被漏掉的,請確認要不要補進去。</div>`
+    : `<div class="note">這一輪沒有「上一輪整輪沒被排到、這一輪回來」的人,複製基準日不會漏人。</div>`;
+  if (d.tswaLeft && d.tswaLeft.length) {
+    const w = el("div","note");
+    w.innerHTML = `<b>TSWA 今天是奇數,${esc(d.tswaLeft.join("、"))} 沒排進去。</b>
+      TSWA 每隊要成雙,所以整組有一位進不了;要換成別人留守的話,直接在葉片組的位子上換人就好。`;
+    $("#returning").append(w);
+  }
+  if (d.zoneNote) {
+    const w = el("div","note");
+    w.style.borderLeftColor = "var(--warn)";
+    w.style.background = "var(--warn-soft)";
+    w.innerHTML = `<b>${esc(d.zoneNote)}</b>`;
+    $("#returning").append(w);
+  }
+}
+
+/* 某個位子可以選誰 —— 沒資格的完全不出現在清單裡。
+   已經排在別隊的人會單獨列一組並標明在哪一隊,選了就自動從那一隊移走,
+   免得合格的人都被佔走時清單變成空的、使用者卡住。 */
+function slotOptions(team, slotIdx) {
+  const lvOf = n => { const p = n && ROSTER.byName.get(n); return p ? p.level.toUpperCase() : ""; };
+  // 只有「隊裡有歐洲技師」的 HV 隊才收緊隊長資格
+  const isHV = (team.worktype||"").toUpperCase() === "HV" &&
+               team.slots.some((s,i) => i !== slotIdx && lvOf(s.name) === R.EURO_LEVEL);
+  // 葉片組只列 TSWA;其他隊不列 TSWA —— 他們不混隊
+  const blade = isBladeTeam(team.worktype,
+    team.slots.filter((s,i) => i !== slotIdx && s.name).map(s => lvOf(s.name)));
+  const isLead = slotIdx === 0 && !team.painter && !blade;
+  const mine = new Set(team.slots.filter((s,i) => i !== slotIdx && s.name).map(s => s.name));
+  const where = new Map();
+  DRAFT.teams.forEach(t => { if (t !== team) t.slots.forEach(s => s.name && where.set(s.name, t.name)); });
+  const avoid = new Set((S.avoid_pairs||[]).map(p => [...p].sort().join(" ")));
+  const excluded = new Set((S.exclude||[]).map(x => x.toLowerCase()));
+
+  const fit = [], rest = [], taken = [], support = [], tswa = [];
+  for (const p of ROSTER.people) {
+    if (!ROSTER.isOffshore(p) && !ROSTER.isSupport(p)) continue;   // 純岸上職務不列
+    if (excluded.has(p.name.toLowerCase())) continue;           // 排除名單不列
+    if (!ROSTER.avail(p, DRAFT.target).ok) continue;            // 當天不能出海的不列
+    if (mine.has(p.name)) continue;                             // 這一隊已經有他了
+    if ([...mine].some(n => avoid.has([p.name,n].sort().join(" ")))) continue;   // 迴避組合不列
+    const lv = p.level.toUpperCase();
+    if (isLead && (isHV ? !R.HV_LEADER.includes(lv) : !R.LEADER.includes(lv))) continue;
+    const o = { value:p.name, label:p.name, lv:p.level, sub:p.group };
+    if (where.has(p.name)) taken.push({ ...o, sub:"已在 " + where.get(p.name) });
+    else if (isBladeLevel(lv)) tswa.push(o);                    // TSWA 自成一組,要成雙
+    else if (ROSTER.isSupport(p)) support.push(o);
+    else if (isHV && (R.F_LEVELS.includes(lv) || lv === R.EURO_LEVEL)) fit.push(o);
+    else rest.push(o);
+  }
+  const out = [];
+  /* 葉片組:TSWA 排最前面;其他隊:TSWA 放最後一組,選了要記得湊成雙 */
+  if (blade && tswa.length) {
+    out.push({ head:true, label:"TSWA 葉片組(要成雙)" }, ...tswa);
+    if (rest.length || fit.length) out.push({ head:true, label:"其他技師(葉片組通常只有 TSWA)" });
+  }
+  if (isHV && fit.length) {
+    out.push({ head:true, label:"TSF / MTF / 歐洲技師(這一隊有 HV 需要)" }, ...fit);
+    if (rest.length) out.push({ head:true, label:"其他可選的人" });
+  }
+  out.push(...rest);
+  if (!blade && tswa.length) out.push({ head:true, label:"TSWA 葉片組(要兩位一起排,不能落單)" }, ...tswa);
+  if (support.length) out.push({ head:true, label:"岸上職務(缺人手時才支援出海)" }, ...support);
+  if (taken.length) out.push({ head:true, label:"已排在其他隊(選了會從那一隊移走)" }, ...taken);
+  return out;
+}
+
+/* 把某個人從其他隊移走 —— 讓上面那一組選了之後不會變成同一人排兩隊 */
+function releaseFrom(name, keepTeam) {
+  for (const t of DRAFT.teams) {
+    if (t === keepTeam) continue;
+    for (const s of t.slots)
+      if (s.name === name) { s.name = ""; s.kind = "gap"; s.why = `${name} 被調到別隊`; }
+  }
+}
+
+function renderDraft() {
+  const ev = draftEval();
+  $("#dteams").innerHTML = "";
+  DRAFT.teams.forEach(team => {
+    const seats = team.slots.filter(s => s.name || s.fixed).length;
+    const c = el("div","team" + (team.night?" night":"") + (team.painter?" painter":"") +
+                    (ev.badTeams.has(team.name)?" bad":""));
+    c.append(el("div","th",
+      `<span class="tn">${esc(team.name)}</span><span class="tv">${esc(team.vessel)}</span>`));
+    c.append(el("div","tags", teamTags(team, seats)));
+
+    team.slots.forEach((s, i) => {
+      if (s.fixed) { c.append(el("div","fixedmem", esc(s.fixed) + "　(外部支援 / painter)")); return; }
+      const isLead = i === 0 && !team.painter;
+      const row = el("div","slot" + (isLead ? " lead" : ""));
+      if (isLead) row.append(el("span","slotlbl","隊長"));
+      const cb = combo({
+        value: s.name, allowEmpty: true,
+        placeholder: s.kind === "gap" ? "空缺 — 點這裡選人" : "選人…",
+        options: () => slotOptions(team, i),
+        onChange: v => {
+          if (v) releaseFrom(v, team);
+          s.name = v; s.kind = v ? "manual" : "gap";
+          s.why = v ? "手動指定" : "空缺";
+          renderDraft();
+        },
+      });
+      row.append(cb);
+      const p = s.name && ROSTER.byName.get(s.name);
+      if (p) row.append(el("span","lv", p.level + (ROSTER.isSupport(p) ? " 支援" : "")));
+      const why = el("span","why" + (s.kind === "auto" ? " auto" : ""), esc(s.why || ""));
+      why.title = s.why || "";                 // 借調的說明會很長,滑過去看得到全文
+      row.append(why);
+      const rm = el("button","rm","移除");
+      rm.onclick = () => { team.slots.splice(i,1); renderDraft(); };
+      row.append(rm);
+      c.append(row);
+    });
+
+    if (!team.painter) {
+      const add = el("div","addrow");
+      const b = el("button","","＋ 加一個人");
+      b.onclick = () => { team.slots.push({ name:"", why:"新增", kind:"gap" }); renderDraft(); };
+      add.append(b);
+      c.append(add);
+    }
+    const baseTeam = (PLAN.days.get(DRAFT.base) || { teams:[] }).teams
+      .find(x => x.name === team.name && x.night === team.night);
+    const tr = baseTeam ? turbineRow(baseTeam,
+      DRAFT.fromFile ? "這一天的機組" : `基準日 ${DRAFT.base} 的機組`) : null;
+    if (tr) c.append(tr);
+    const copy = el("button","btn ghost sm","複製這一隊");
+    copy.style.marginTop = "7px";
+    copy.onclick = () => copyText(teamLine(team), copy);
+    c.append(copy);
+    $("#dteams").append(c);
+  });
+
+  const s = ev.summary;
+  $("#livebar").classList.remove("hide");
+  $("#livebar").innerHTML =
+    `<span><b>草稿目前</b></span>` +
+    `<span>已排 <span class="n">${s.scheduled}</span> 人</span>` +
+    `<span>總表可出海 <span class="n">${s.should}</span> 人</span>` +
+    `<span>差額 <span class="n ${s.diff===0?"ok":"wr"}">${s.diff>0?"+":""}${s.diff}</span></span>` +
+    `<span>要處理 <span class="n ${s.stop?"bad":"ok"}">${s.stop}</span></span>` +
+    `<span>提醒 <span class="n wr">${s.warn}</span></span>` +
+    `<span style="color:var(--ink-3);font-size:12.5px">每換一個人就重新檢核一次</span>`;
+  renderIssues($("#draftIssues"), ev.issues);
+  renderUnsched(ev);
+}
+
+function teamLine(team) {
+  const parts = team.slots.map(s => {
+    if (s.fixed) return s.fixed;
+    if (!s.name) return "";
+    const p = ROSTER.byName.get(s.name);
+    return p ? shortName(p) + "-" + p.level : s.name;
+  }).filter(Boolean);
+  return `${team.name}: ${parts.join(", ")}`;
+}
+/* 班表上習慣寫 Winston.Lin 這種短名,盡量還原成一樣的格式 */
+function shortName(p) {
+  const s = p.name.replace(/-(GWS|IPS|Maxlines|TOWSC|Swire)$/i, "");
+  const nick = [...s.matchAll(/\(([^)]*)\)/g)].map(m => m[1].trim()).filter(x => !isNameTag(x))[0];
+  const base = s.replace(/\([^)]*\)/g," ").replace(/\s+/g," ").trim();
+  let given, fam;
+  if (base.includes(",")) {
+    const i = base.indexOf(",");
+    fam = base.slice(0,i).trim(); given = nick || base.slice(i+1).trim();
+  } else {
+    const parts = base.split(/\s+/);
+    fam = parts[parts.length-1]; given = nick || parts.slice(0,-1).join(" ");
+  }
+  given = (given || "").trim().split(/\s+/)[0];        // 中間名不寫進縮寫
+  return `${given}.${(fam||"").replace(/\s+/g,"")}`;
+}
+
+/* 把畫面上的草稿寫成一份全新的 Excel。原本那兩個檔案完全不會被改到 —— 
+   工具從頭到尾只有「讀」原檔,這裡是另外生一個新檔。 */
+function draftRows() {
+  const ev = draftEval();
+  const wd = ["日","一","二","三","四","五","六"][new Date(DRAFT.target+"T00:00:00Z").getUTCDay()];
+  const rows = [];
+  rows.push(["雲林排班草稿", "", "", "", "", "", ""]);
+  rows.push(["日期", DRAFT.target, "星期" + wd, "", "基準日", DRAFT.base, ""]);
+  rows.push(["產生時間", new Date().toLocaleString("zh-TW"), "", "", "", "", ""]);
+  rows.push(["人力總表", ROSTER_INFO.file + " · " + ROSTER_INFO.sheet, "", "",
+             "出海計畫", PLAN_INFO.file, ""]);
+  rows.push([]);
+  rows.push(["工作類型", "船", "隊伍", "成員(可直接貼進 Daily Ops 的 D 欄)",
+             "核對人數", "船位", "說明"]);
+  for (const t of DRAFT.teams) {
+    const names = t.slots.map(x => {
+      if (x.fixed) return x.fixed;
+      if (!x.name) return "";
+      const p = ROSTER.byName.get(x.name);
+      return p ? shortName(p) + "-" + p.level : x.name;
+    }).filter(Boolean);
+    const seats = t.slots.filter(x => x.name || x.fixed).length;
+    const cnt = t.painter ? "" : t.slots.filter(x => {
+      const p = x.name && ROSTER.byName.get(x.name);
+      return p && !ROSTER.isSupport(p);
+    }).length;
+    const gaps = t.slots.filter(x => !x.name && !x.fixed).length;
+    const note = [t.night ? "夜班" : "", t.painter ? "painter,不套用規則" : "",
+                  gaps ? `還缺 ${gaps} 人` : ""].filter(Boolean).join("、");
+    rows.push([t.worktype || "", t.vessel || "", t.name, names.join(", "),
+               cnt === "" ? "" : cnt, seats, note]);
+  }
+  rows.push([]);
+  rows.push(["檢核結果", `要處理 ${ev.summary.stop} 則、提醒 ${ev.summary.warn} 則`,
+             "", "", "", "", ""]);
+  rows.push(["級別", "問題", "", "", "建議", "", ""]);
+  for (const i of ev.issues)
+    rows.push([{stop:"要處理",warn:"提醒",info:"說明"}[i.level] || i.level, i.msg,
+               "", "", i.fix, "", ""]);
+  if (!ev.issues.length) rows.push(["", "沒有查到問題", "", "", "", "", ""]);
+  return rows;
+}
+
+/* 日期 → Excel 序號(1899-12-30 起算) */
+const dateSerial = iso =>
+  Math.round((new Date(iso + "T00:00:00Z") - Date.UTC(1899,11,30)) / 86400000);
+const WEEKDAY = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+
+/* 把草稿寫進「出海計畫」的複本裡 —— 版面、顏色、其他分頁全部照舊。
+   兩種情形:
+     這一天已經在檔案裡 → 只改那幾格 D 欄的文字
+     這一天還沒建立     → 整段複製基準日的區塊(連同樣式),再填上新的人 */
+/* 把一天或多天的草稿寫進「出海計畫」的複本。
+   已經有的日子只改 D 欄;還沒有的日子整段複製基準日的區塊,依序接在最後一天後面。
+   原檔從頭到尾只被讀取。 */
+async function exportPlanXlsx(btn, list) {
+  const drafts = (list && list.length ? list.map(x => x.draft || x) : (DRAFT ? [DRAFT] : []))
+    .filter(Boolean).sort((a,b) => a.target < b.target ? -1 : 1);
+  if (!drafts.length) { alert("還沒有草稿可以存。"); return; }
+  if (IN_ARTIFACT) { alert("網頁版不能直接存檔,請改用本機的 yunlin.html。"); return; }
+  flash(btn, "產生中…");
+  await new Promise(r => setTimeout(r, 30));
+
+  const zip = PLAN.book.zip, part = PLAN.part;
+  let xml = await readPart(zip, part);
+
+  const nameOf = t => t.slots.map(x => {
+    if (x.fixed) return x.fixed;
+    if (!x.name) return "";
+    const p = ROSTER.byName.get(x.name);
+    return p ? shortName(p) + "-" + p.level : x.name;
+  }).filter(Boolean);
+
+  const rowRe = r => new RegExp(`<row r="${r}"[^>]*?(?:/>|>[\\s\\S]*?</row>)`);
+  const sliceRows = (from, to) => {
+    const re = /<row r="(\d+)"[^>]*?(?:\/>|>[\s\S]*?<\/row>)/g;
+    let start = -1, end = -1, m;
+    while ((m = re.exec(xml))) {
+      const r = +m[1];
+      if (r >= from && start < 0) start = m.index;
+      if (r <= to) end = m.index + m[0].length;
+      if (r > to) break;
+    }
+    return start < 0 ? null : { text: xml.slice(start, end), start, end };
+  };
+
+  const updated = [], added = [], skipped = [];
+
+  // ---- 先處理已經存在的日子(只改格子,不動列數,所以位置不會跑掉) ----
+  for (const dr of drafts) {
+    if (!PLAN.days.has(dr.target)) continue;
+    const day = PLAN.days.get(dr.target);
+    const seg = sliceRows(day.headRow, day.endRow);
+    if (!seg) { skipped.push(dr.target); continue; }
+    let body = seg.text;
+    for (const dt of dr.teams) {
+      const src = day.teams.find(x => x.name === dt.name && x.night === dt.night);
+      if (!src) continue;
+      const rowsForD = src.dRows.length ? src.dRows : [src.headRow];
+      const chunks = spread(nameOf(dt), rowsForD.length);
+      rowsForD.forEach((r, i) => {
+        const rm = body.match(rowRe(r));
+        if (!rm) return;
+        body = body.slice(0, rm.index) + editRow(rm[0], r, { D:{ text: chunks[i] || "" } }) +
+               body.slice(rm.index + rm[0].length);
+      });
+    }
+    xml = xml.slice(0, seg.start) + body + xml.slice(seg.end);
+    updated.push(dr.target);
+  }
+
+  // ---- 再處理還沒有的日子:一天接一天疊在最後面 ----
+  const lastDay = PLAN.days.get(PLAN.dates[PLAN.dates.length - 1]);
+  let cursor = lastDay.endRow + 2;          // 空一列再接
+  let blocks = "", hiRow = cursor;
+
+  for (const dr of drafts) {
+    if (PLAN.days.has(dr.target)) continue;
+    // 基準日本身可能也是草稿(9/16 參考 9/15),版面要一路往回找到檔案裡真的有的那一天
+    const base = layoutDay(PLAN, dr.base);
+    const seg = base ? sliceRows(base.headRow, base.endRow) : null;
+    if (!seg) { skipped.push(dr.target); continue; }
+    const delta = cursor - base.headRow;
+    let body = seg.text
+      .replace(/<row r="(\d+)"/g, (_, r) => `<row r="${+r + delta}"`)
+      .replace(/<c r="([A-Z]+)(\d+)"/g, (_, c, r) => `<c r="${c}${+r + delta}"`);
+    const editAt = (r, edits) => {
+      const rm = body.match(rowRe(r));
+      if (!rm) return;
+      body = body.slice(0, rm.index) + editRow(rm[0], r, edits) + body.slice(rm.index + rm[0].length);
+    };
+    editAt(base.headRow + delta, {
+      A: { num: dateSerial(dr.target) },
+      B: { text: WEEKDAY[new Date(dr.target + "T00:00:00Z").getUTCDay()] } });
+    for (const bt of base.teams) {
+      const dt = dr.teams.find(x => x.name === bt.name && x.night === bt.night);
+      const rowsForD = bt.dRows.length ? bt.dRows : [bt.headRow];
+      const chunks = dt ? spread(nameOf(dt), rowsForD.length) : rowsForD.map(() => "");
+      rowsForD.forEach((r, i) => editAt(r + delta, { D:{ text: chunks[i] || "" } }));
+      for (const r of bt.rows) editAt(r + delta,
+        { E:{clear:true}, F:{clear:true}, G:{clear:true}, H:{clear:true},
+          I:{clear:true}, J:{clear:true}, K:{clear:true}, L:{clear:true},
+          M:{clear:true}, N:{clear:true} });
+    }
+    blocks += body;
+    hiRow = cursor + (base.endRow - base.headRow);
+    added.push({ date: dr.target, at: cursor, base: dr.base });
+    cursor = hiRow + 2;
+  }
+
+  if (blocks) {
+    /* Excel 要求 <row> 的列號由小到大排;只要有一列順序不對,整個檔就會被判定
+       「無法讀取的內容」而打不開。新區塊從 lastDay.endRow+2 起算,所以中間那一列
+       空白列(endRow+1)也一定要一起清掉,否則它會被擠到新區塊後面,列號就倒退了。 */
+    const lo = lastDay.endRow + 1;
+    xml = xml.replace(/<row r="(\d+)"[^>]*?(?:\/>|>[\s\S]*?<\/row>)/g,
+      (whole, r) => (+r >= lo && +r <= hiRow) ? "" : whole);
+    const anchor = xml.match(rowRe(lastDay.endRow));
+    if (anchor) xml = xml.slice(0, anchor.index + anchor[0].length) + blocks +
+                      xml.slice(anchor.index + anchor[0].length);
+    else xml = xml.replace("</sheetData>", blocks + "</sheetData>");
+  }
+
+  const blob = await rebuildXlsx(zip, { [part]: xml });
+  const stem = PLAN_INFO.file.replace(/\.xlsx$/i, "");
+  const tag = drafts.length === 1 ? drafts[0].target.replace(/-/g,"")
+    : drafts[0].target.replace(/-/g,"") + "-" + drafts[drafts.length-1].target.replace(/-/g,"");
+  const fname = `${stem}_${tag}.xlsx`;
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = fname;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 8000);
+
+  const lines = [];
+  if (updated.length) lines.push(`更新既有日期 ${updated.length} 天:${updated.join("、")}`);
+  if (added.length) lines.push(`新增 ${added.length} 天,從第 ${added[0].at} 列開始:` +
+    added.map(x => x.date).join("、"));
+  if (skipped.length) lines.push(`跳過 ${skipped.length} 天(找不到基準日的版面):${skipped.join("、")}`);
+  alert(lines.join("\n") + "\n\n已另存為:" + fname +
+        "\n(" + (blob.size/1e6).toFixed(1) + " MB)" +
+        "\n\n原本的 " + PLAN_INFO.file + " 完全沒有被更動。");
+  flash(btn, "已產生");
+}
+
+async function exportXlsx(btn) {
+  if (!DRAFT) { alert("請先按「一鍵產生這一天的草稿」。"); return; }
+  const blob = makeXlsx("班表草稿", draftRows(), [12, 14, 14, 62, 10, 8, 30]);
+  const fname = `雲林班表草稿_${DRAFT.target.replace(/-/g,"")}.xlsx`;
+  if (IN_ARTIFACT) {
+    alert("網頁版不能直接存檔。請用本機的 yunlin.html(雙擊開啟)產生 Excel,\n" +
+          "或先按「複製全部隊伍」把文字貼進 Excel。");
+    return;
+  }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = fname;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  flash(btn, "已存 " + fname);
+}
+
+/* ---------- 1. 2. 3. 名單 ----------
+   [U] 2026-09-15 Tina:「我要今天可以出海的技師名單,用 1 2 3 列出來,用檔案裡的本名+英文名」。
+   名字照總表原樣(Hsiao, Yi-Ying (Manfred)),只拿掉全大寫的公司註記 (SPIE)、(BGB)。 */
+function listName(n) {
+  return n.replace(/\s*\(([^)]*)\)/g, (m, t) => isNameTag(t.trim()) ? "" : m).replace(/\s+/g, " ").trim();
+}
+function dayTeamsNow() {
+  return (DRAFT && DRAFT.target === DAY) ? teamsFromDraft(DRAFT, ROSTER) : teamsFromPlan(PLAN, ROSTER, DAY);
+}
+function buildList(kind) {
+  const teams = dayTeamsNow();
+  const ev = evaluate(teams, ROSTER, DAY, S);
+  const okAvail = p => { const a = ev.avail.get(p.name) || {};
+    return a.ok && (a.cat === "available" || a.cat === "offshore" ||
+                    (a.cat === "support" && ev.scheduled.has(p.name))); };
+  // 班表已排:照隊伍順序;不算劃掉的、外部支援、隱藏的、不為雲林工作的
+  const sched = [], seen = new Set();
+  for (const t of teams) {
+    if (t.painter) continue;
+    for (const m of t.members) {
+      if (m.struck || m.outsider || !m.person || m.person.hidden || seen.has(m.person.name)) continue;
+      if ((ev.avail.get(m.person.name) || {}).cat === "away") continue;
+      seen.add(m.person.name); sched.push(m.person);
+    }
+  }
+  const avail = ROSTER.people.filter(okAvail);                 // 照總表順序
+  const main = kind === "scheduled" ? sched : avail;
+  const title = kind === "scheduled"
+    ? `${DAY} 班表已排的技師(${sched.length} 位,照隊伍順序${DRAFT && DRAFT.target === DAY ? ",含畫面上的草稿" : ""})`
+    : `${DAY} 總表可出海的技師(${avail.length} 位,照總表順序)`;
+  const lines = [title, ...main.map((p, i) => `${i + 1}. ${listName(p.name)}`)];
+  const schedSet = new Set(sched.map(p => p.name)), availSet = new Set(avail.map(p => p.name));
+  const onlyA = avail.filter(p => !schedSet.has(p.name)), onlyS = sched.filter(p => !availSet.has(p.name));
+  if (onlyA.length || onlyS.length) lines.push("");
+  if (onlyA.length) lines.push(`總表可出海、但班表沒排到(${onlyA.length}):` + onlyA.map(p => listName(p.name)).join("、"));
+  if (onlyS.length) lines.push(`班表有排、但總表當天不是可出海(${onlyS.length}):` +
+    onlyS.map(p => `${listName(p.name)}(${(ev.avail.get(p.name)||{}).why || "?"})`).join("、"));
+  return lines.join("\n");
+}
+async function showList(kind, boxSel, btn) {
+  const txt = buildList(kind);
+  const box = $(boxSel);
+  box.classList.remove("hide"); box.value = txt;
+  try { await navigator.clipboard.writeText(txt); flash(btn, "已複製"); }
+  catch (_) { box.focus(); box.select(); flash(btn, "請按 Ctrl+C"); }
+}
+
+async function copyText(txt, btn) {
+  try { await navigator.clipboard.writeText(txt); if (btn) flash(btn, "已複製"); }
+  catch (_) {
+    const box = $("#copybox");
+    box.classList.remove("hide"); box.value = txt; box.focus(); box.select();
+    if (btn) flash(btn, "請按 Ctrl+C");
+  }
+}
+function flash(btn, t) {
+  const old = btn.textContent;
+  btn.textContent = t;
+  setTimeout(() => btn.textContent = old, 1600);
+}
+
+/* ---------- 設定 ---------- */
+function buildCandidates() {
+  const offshore = ROSTER.people.filter(p => ROSTER.isOffshore(p));
+  const leaders = offshore.filter(p => ROSTER.canLead(p));
+  const nights = new Map();
+  const last = PLAN.dates[PLAN.dates.length-1];
+  for (const d of PLAN.dates) {
+    if ((new Date(last) - new Date(d)) / 86400000 > 90) continue;
+    linkNames(PLAN, ROSTER, d);
+    for (const t of PLAN.days.get(d).teams) {
+      if (!t.night) continue;
+      for (const m of t.members) if (m.person && !m.struck)
+        nights.set(m.person.name, (nights.get(m.person.name)||0)+1);
+    }
+  }
+  const js = ps => ps.map(p => ({ name:p.name, level:p.level, group:p.group }));
+  return { leaders: js(leaders), offshore: js(offshore), all: js(ROSTER.people),   // 隱藏的人不列
+    night: [...nights.entries()].sort((a,b)=>b[1]-a[1]).map(([name,times]) =>
+      ({ name, times, level:(ROSTER.byName.get(name)||{}).level||"",
+         group:`近 90 天上過 ${times} 次夜班` })) };
+}
+
+function buildSettings() {
+  CAND = buildCandidates();
+  const box = $("#settings");
+  box.innerHTML = "";
+  box.append(cardFile(), cardLeaderOrder(), cardOvertime(),
+    cardPairs("avoid_pairs","迴避組合","選出來的兩位不會被排在同一隊,草稿的下拉選單裡也會互相過濾掉。"),
+    cardPairs("bind_pairs","綁定組合","選出來的兩位會盡量排在同一隊。BT 階級較低要 CT 帶,可以用這裡綁。"),
+    cardCheck("night_fixed","夜班固定人選",CAND.night,
+      "只列出近 90 天真的上過夜班的人,沒上過的不會出現,免得清單太長。"),
+    cardCheck("exclude","排除名單",CAND.all,
+      "勾起來的人不會被自動排進任何一隊,草稿的下拉選單裡也不會出現。"),
+    cardNumbers());
+}
+
+function saveRow(parent) {
+  const b = el("button","btn","儲存設定");
+  const m = el("span","saved hide","已儲存");
+  b.onclick = () => { saveS(); if (DAY) loadDay();
+    m.classList.remove("hide"); setTimeout(()=>m.classList.add("hide"),1800); };
+  const row = el("div","act"); row.append(b,m); parent.append(row);
+}
+
+function cardFile() {
+  const c = el("div","card", `<h2>設定檔</h2>
+    <div class="hint">設定平常自動存在這台電腦的瀏覽器裡,不用特別做什麼。
+      要換電腦、或想留一份備份時,按<b>「儲存成檔案」</b>會產生一個
+      <b>雲林排班設定.json</b>;下次在任何一台按<b>「讀取設定檔」</b>挑那個檔,設定就全部回來了。</div>`);
+  const row = el("div","pairs");
+  const msg = el("span","saved hide","");
+  const area = el("textarea","big hide");
+  area.style.fontSize = "12px";
+
+  const save = el("button","btn","儲存成檔案");
+  save.onclick = () => {
+    const json = JSON.stringify(S, null, 2);
+    if (!IN_ARTIFACT) {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([json], { type:"application/json" }));
+      a.download = "雲林排班設定.json";
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      msg.textContent = "已存到「下載」資料夾:雲林排班設定.json";
+    } else {
+      area.classList.remove("hide");
+      area.value = json;
+      navigator.clipboard.writeText(json).catch(() => { area.focus(); area.select(); });
+      msg.textContent = "網頁版不能直接存檔,設定文字已複製 —— 貼到記事本存起來即可";
+    }
+    msg.classList.remove("hide");
+    setTimeout(() => msg.classList.add("hide"), 7000);
+  };
+
+  const inp = el("input");
+  inp.type = "file"; inp.accept = ".json,application/json"; inp.style.display = "none";
+  inp.onchange = async () => {
+    if (!inp.files[0]) return;
+    try {
+      S = { ...DEFAULTS, ...JSON.parse(await inp.files[0].text()) };
+      saveS(); buildSettings(); if (DAY) loadDay();
+      msg.textContent = "設定已恢復:" + inp.files[0].name;
+      msg.classList.remove("hide");
+      setTimeout(() => msg.classList.add("hide"), 6000);
+    } catch (e) { alert("這個檔案讀不起來,請確認是之前存的設定檔。\n" + e.message); }
+    inp.value = "";
+  };
+  const load = el("button","btn ghost","讀取設定檔");
+  load.onclick = () => inp.click();
+
+  const paste = el("button","btn ghost","貼上設定文字");
+  const apply = el("button","btn hide","套用貼上的文字");
+  paste.onclick = () => {
+    area.classList.remove("hide"); area.value = "";
+    area.placeholder = "把設定文字貼在這裡,再按右邊的「套用貼上的文字」";
+    area.focus(); apply.classList.remove("hide");
+  };
+  apply.onclick = () => {
+    try { S = { ...DEFAULTS, ...JSON.parse(area.value) }; saveS(); buildSettings(); if (DAY) loadDay(); }
+    catch (e) { alert("這段文字讀不起來:" + e.message); }
+  };
+
+  row.append(save, load, paste, apply, inp, msg);
+  c.append(row, area);
+  return c;
+}
+
+function cardLeaderOrder() {
+  const c = el("div","card", `<h2>隊長優先順序</h2>
+    <div class="hint">只列 TS、TSF、MT、MTF 這四級 —— CT 和 BT 只能當隊員,不會出現在這裡。
+      順序越前面,補隊長時越優先。<b>HV 隊另外要求帶 F(TSF / MTF),系統會自己在這份順序裡挑帶 F 的。</b></div>`);
+  S.leader_order = S.leader_order || [];
+  const list = el("div","ordlist");
+  const render = () => {
+    list.innerHTML = "";
+    S.leader_order = S.leader_order.filter(n => CAND.leaders.some(p => p.name === n));
+    const rest = CAND.leaders.filter(p => !S.leader_order.includes(p.name)).map(p => p.name);
+    S.leader_order.concat(rest).forEach((name,i) => {
+      const p = CAND.leaders.find(x => x.name === name);
+      const row = el("div","",
+        `<span class="idx">${i+1}</span><span>${esc(name)}</span>
+         <span style="font-size:11px;color:var(--ink-3)">${esc(p.level)}</span>`);
+      const up = el("button","","上移");
+      up.onclick = () => {
+        if (!S.leader_order.includes(name)) S.leader_order.push(name);
+        const j = S.leader_order.indexOf(name);
+        if (j > 0) { S.leader_order.splice(j,1); S.leader_order.splice(j-1,0,name); }
+        render();
+      };
+      row.append(up); list.append(row);
+    });
+  };
+  render(); c.append(list); saveRow(c); return c;
+}
+
+function cardOvertime() {
+  const c = el("div","card", `<h2>加班意願</h2>
+    <div class="hint">只列可出海的人;AOC、SM、SK、ST 這些岸上職務不會出現。
+      補人時「願意」排在前面,「不加班」最後才考慮。</div>`);
+  S.overtime = S.overtime || {};
+  const search = el("input");
+  search.placeholder = "搜尋姓名…"; search.style.cssText = "margin-bottom:8px;width:220px";
+  const box = el("div","chk wide");
+  const render = () => {
+    const q = clean(search.value);
+    box.innerHTML = "";
+    CAND.offshore.filter(p => !q || clean(p.name).includes(q)).forEach(p => {
+      const row = el("label","", `<span>${esc(p.name)}</span><span class="lv">${esc(p.level)}</span>`);
+      const tri = el("div","tri");
+      [["yes","願意"],["maybe","看情況"],["no","不加班"]].forEach(([v,t]) => {
+        const b = el("button", S.overtime[p.name]===v ? "on" : "", t);
+        b.onclick = e => { e.preventDefault(); S.overtime[p.name] = v;
+          tri.querySelectorAll("button").forEach(x => x.classList.remove("on")); b.classList.add("on"); };
+        tri.append(b);
+      });
+      row.append(tri); box.append(row);
+    });
+    if (!box.children.length) box.innerHTML = `<span class="hint">沒有符合的人。</span>`;
+  };
+  search.oninput = render; render();
+  c.append(search, box); saveRow(c); return c;
+}
+
+function cardPairs(key, title, hint) {
+  const c = el("div","card", `<h2>${title}</h2><div class="hint">${hint}</div>`);
+  S[key] = S[key] || [];
+  let a = "", b = "";
+  const list = el("div","pl-list");
+  const opts = other => CAND.offshore
+    .filter(p => p.name !== other)
+    .filter(p => !other || !S[key].some(pr => pr.includes(p.name) && pr.includes(other)))
+    .map(p => ({ value:p.name, label:p.name, lv:p.level, sub:p.group }));
+  const cbA = combo({ placeholder:"輸入姓名搜尋…", allowEmpty:true,
+    options: () => opts(b), onChange: v => { a = v; b = ""; cbB.setValue(""); } });
+  const cbB = combo({ placeholder:"輸入姓名搜尋…", allowEmpty:true,
+    options: () => opts(a), onChange: v => { b = v; } });
+  const add = el("button","btn","加入");
+  add.onclick = () => {
+    if (!a || !b || a === b) return;
+    if (S[key].some(p => p.includes(a) && p.includes(b))) return;
+    S[key].push([a,b]);
+    a = ""; b = ""; cbA.setValue(""); cbB.setValue(""); render();
+  };
+  const render = () => {
+    list.innerHTML = "";
+    S[key].forEach((p,i) => {
+      const t = el("span","pair", `${esc(p[0])} ＋ ${esc(p[1])}`);
+      const x = el("button","","移除");
+      x.onclick = () => { S[key].splice(i,1); render(); };
+      t.append(x); list.append(t);
+    });
+    if (!S[key].length) list.innerHTML = `<span class="hint">還沒有設定任何組合。</span>`;
+  };
+  render();
+  const row = el("div","pairs");
+  row.append(cbA, el("span","","＋"), cbB, add);
+  c.append(row, list); saveRow(c); return c;
+}
+
+function cardCheck(key, title, people, hint) {
+  const c = el("div","card", `<h2>${title}</h2><div class="hint">${hint}</div>`);
+  S[key] = S[key] || [];
+  const search = el("input");
+  search.placeholder = "搜尋姓名…"; search.style.cssText = "margin-bottom:8px;width:220px";
+  const box = el("div","chk");
+  const render = () => {
+    const q = clean(search.value);
+    box.innerHTML = "";
+    people.filter(p => !q || clean(p.name).includes(q)).forEach(p => {
+      const lab = el("label","",
+        `<input type="checkbox" ${S[key].includes(p.name) ? "checked" : ""}>` +
+        `<span>${esc(p.name)}</span><span class="lv">${esc(p.level||"")}</span>` +
+        `<span class="gp">${esc(p.group||"")}</span>`);
+      lab.querySelector("input").onchange = e => {
+        const set = new Set(S[key]);
+        e.target.checked ? set.add(p.name) : set.delete(p.name);
+        S[key] = [...set];
+      };
+      box.append(lab);
+    });
+    if (!box.children.length) box.innerHTML = `<span class="hint">沒有符合的人。</span>`;
+  };
+  search.oninput = render; render();
+  c.append(search, box); saveRow(c); return c;
+}
+
+function cardNumbers() {
+  const c = el("div","card", `<h2>人數門檻</h2>
+    <div class="hint">用上下鍵調整,不用打字。年保隊 5 人或 4 人算正常,所以下限預設 4。</div>`);
+  const row = el("div","pairs");
+  [["min_team","一隊最少人數",1,12],["as_ideal","年保隊理想人數",1,12],
+   ["as_acceptable","年保隊人數下限",1,12],["vessel_capacity","一船一趟上限",1,30]]
+   .forEach(([k,label,lo,hi]) => {
+    const w = el("label","", `<span style="font-size:13px">${label}</span>`);
+    w.style.cssText = "display:flex;gap:7px;align-items:center";
+    const i = el("input");
+    i.type = "number"; i.min = lo; i.max = hi; i.value = S[k] ?? "";
+    i.style.width = "68px";
+    i.onchange = () => S[k] = Number(i.value);
+    w.append(i); row.append(w);
+  });
+  c.append(row); saveRow(c); return c;
+}
+
+/* ---------- 留言 ---------- */
+function snapshot() {
+  const ev = DRAFT ? draftEval() : LAST;
+  const lines = [];
+  lines.push(`看的日期:${DAY || "-"}`);
+  lines.push(DRAFT ? `已產生草稿,基準日 ${DRAFT.base}` : "沒有產生草稿(看的是 Excel 原本的內容)");
+  if (ev) lines.push(`當時:已排 ${ev.summary.scheduled} 人 / 總表可出海 ${ev.summary.should} 人 ` +
+                     `/ 要處理 ${ev.summary.stop} 則 / 提醒 ${ev.summary.warn} 則`);
+  lines.push(`門檻:一隊最少 ${S.min_team} 人、年保理想 ${S.as_ideal} 下限 ${S.as_acceptable}、一船 ${S.vessel_capacity} 席`);
+  lines.push(`排除名單 ${(S.exclude||[]).length} 人;隊長順序前三:${(S.leader_order||[]).slice(0,3).join("、") || "未設定"}`);
+  lines.push(`綁定 ${(S.bind_pairs||[]).length} 組、迴避 ${(S.avoid_pairs||[]).length} 組、夜班固定 ${(S.night_fixed||[]).length} 人`);
+  lines.push(`加班意願已設定 ${Object.keys(S.overtime||{}).length} 人`);
+  if (ev && ev.issues.length)
+    lines.push("當時的問題:" + ev.issues.slice(0,5).map(i => i.msg).join(" / ") +
+               (ev.issues.length > 5 ? ` …等 ${ev.issues.length} 則` : ""));
+  return { state: lines.join("\n"), settings: JSON.parse(JSON.stringify(S)),
+           day: DAY, base: DRAFT ? DRAFT.base : null, summary: ev ? ev.summary : null };
+}
+
+function buildNotes() {
+  const box = $("#notes");
+  box.innerHTML = "";
+  const c = el("div","card", `<h2>留言 / 使用心得</h2>
+    <div class="hint">寫下哪裡怪怪的、哪裡想改。送出時會<b>自動把你現在畫面的狀況一起記下來</b> ——
+      看的是哪一天、有沒有產生草稿、基準日、當下的設定、當時有幾個問題。
+      這樣看到留言的人才知道你是在什麼條件下講這句話。留言存在這台電腦,不會傳出去。</div>`);
+  const snap = snapshot();
+  c.append(el("div","snap", `<b>會一起記下來的現況</b><br>` + esc(snap.state).replace(/\n/g,"<br>")));
+  const ta = el("textarea","big");
+  ta.placeholder = "例:Snail 2 只有 1 個人一直跳提醒,但那天本來就只派一個人去看葉片,這種可不可以不要提醒?";
+  const row = el("div","act");
+  const send = el("button","btn","送出留言");
+  const msg = el("span","saved hide","已記錄");
+  send.onclick = () => {
+    const t = ta.value.trim();
+    if (!t) { ta.focus(); return; }
+    NOTES.unshift({ at:new Date().toISOString(), text:t, ...snapshot() });
+    saveN(); ta.value = "";
+    buildNotes();
+    const m2 = $("#notes").querySelector(".saved");
+    if (m2) { m2.classList.remove("hide"); setTimeout(()=>m2.classList.add("hide"),1800); }
+  };
+  row.append(send, msg);
+  c.append(ta, row);
+  box.append(c);
+
+  if (NOTES.length) {
+    const list = el("div","card");
+    const head = el("div","act");
+    head.append(el("h2","","已記錄的留言(" + NOTES.length + " 則)"));
+    const copyAll = el("button","btn ghost sm","複製全部留言(含當時設定)");
+    copyAll.onclick = () => copyText(NOTES.map(noteText).join("\n\n" + "─".repeat(40) + "\n\n"), copyAll);
+    head.append(copyAll);
+    list.append(head);
+    const wrap = el("div","msglist");
+    NOTES.forEach((n,i) => {
+      const it = el("div","msgitem");
+      const h = el("div","mh",
+        `<span>${new Date(n.at).toLocaleString("zh-TW")}</span>` +
+        `<span>日期 ${esc(n.day||"-")}</span>` +
+        (n.base ? `<span>基準日 ${esc(n.base)}</span>` : `<span>無草稿</span>`) +
+        (n.summary ? `<span>要處理 ${n.summary.stop} · 提醒 ${n.summary.warn}</span>` : ""));
+      const rm = el("button","mrm","刪除");
+      rm.onclick = () => { NOTES.splice(i,1); saveN(); buildNotes(); };
+      h.append(rm);
+      it.append(h, el("div","mb", esc(n.text)));
+      const one = el("button","btn ghost sm","複製這一則");
+      one.style.marginTop = "8px";
+      one.onclick = () => copyText(noteText(n), one);
+      it.append(one);
+      wrap.append(it);
+    });
+    list.append(wrap);
+    box.append(list);
+  }
+}
+
+function noteText(n) {
+  return [
+    `【留言】${new Date(n.at).toLocaleString("zh-TW")}`,
+    n.text,
+    "",
+    "【當時的畫面狀況】",
+    n.state || "(沒有記錄)",
+    "",
+    "【當時的設定】",
+    JSON.stringify(n.settings, null, 2),
+  ].join("\n");
+}
+
+/* ---------- 綁事件 ---------- */
+loadLocal();
+$("#pickbtn").onclick = () => $("#picker").click();
+$("#picker").onchange = e => handleFiles(e.target.files);
+const drop = $("#drop");
+["dragenter","dragover"].forEach(ev => drop.addEventListener(ev, e => {
+  e.preventDefault(); drop.classList.add("over"); }));
+["dragleave","drop"].forEach(ev => drop.addEventListener(ev, e => {
+  e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", e => handleFiles(e.dataTransfer.files));
+document.addEventListener("dragover", e => e.preventDefault());
+document.addEventListener("drop", e => e.preventDefault());
+
+document.querySelectorAll(".nav button").forEach(b => b.onclick = () => tab(b.dataset.tab));
+$("#prev").onclick = () => { const i = ALLDATES.indexOf(DAY)-1;
+  if (i >= 0) { DAY = ALLDATES[i]; dateCombo.setValue(DAY); loadDay(); } };
+$("#next").onclick = () => { const i = ALLDATES.indexOf(DAY)+1;
+  if (i < ALLDATES.length) { DAY = ALLDATES[i]; dateCombo.setValue(DAY); loadDay(); } };
+$("#gen").onclick = genDraft;
+document.querySelectorAll("button[data-list]").forEach(b =>
+  b.onclick = () => showList(b.dataset.list, b.dataset.box, b));
+$("#dropdraft").onclick = () => {
+  if (!DRAFTS.has(DAY)) { alert("這一天本來就沒有草稿。"); return; }
+  if (!confirm(`要丟掉 ${DAY} 的草稿嗎?丟掉之後這一天就回到「還沒排」的狀態。`)) return;
+  DRAFTS.delete(DAY);
+  loadDay();
+  if (PRE) renderAhead();
+};
+$("#regenAhead").onclick = () => {
+  if (!confirm("重新產生會蓋掉這兩輪裡所有手動改過的內容,確定嗎?")) return;
+  buildAhead(true);
+  const m = $("#amsg");
+  m.textContent = "已重新產生(依目前設定)";
+  m.classList.remove("hide");
+  setTimeout(() => m.classList.add("hide"), 2500);
+};
+/* 「全部存成新的出海計畫」= 畫面上所有做好的草稿,不只下兩輪那 14 天 */
+$("#exportAhead").onclick = e =>
+  exportPlanXlsx(e.currentTarget, [...DRAFTS.keys()].sort().map(d => DRAFTS.get(d)));
+$("#exportplan").onclick = e => exportPlanXlsx(e.currentTarget);
+$("#exportx").onclick = e => exportXlsx(e.currentTarget);
+$("#copyall").onclick = () => {
+  if (!DRAFT) { alert("請先按「一鍵產生這一天的草稿」。"); return; }
+  copyText([`${DRAFT.target}(基準日 ${DRAFT.base})`, ""]
+    .concat(DRAFT.teams.map(teamLine)).join("\n"), $("#copyall"));
+};
+/* 總表會一直換新版:只換那一個檔,設定、日期、草稿都保留。 */
+const swapInput = el("input");
+swapInput.type = "file"; swapInput.accept = ".xlsx"; swapInput.style.display = "none";
+document.body.append(swapInput);
+swapInput.onchange = async () => {
+  const f = swapInput.files[0];
+  swapInput.value = "";
+  if (!f) return;
+  const old = ROSTER;
+  try {
+    const book = await Book.open(f, () => {});
+    if (!book.sheetNames.some(n => /^allowance/i.test(n))) {
+      alert("這個檔案沒有 Allowance 分頁,不像是人力總表。"); return;
+    }
+    await book.prepare(() => {});
+    ROSTER = await Roster.build(book, () => {});
+    ROSTER_INFO = { file:f.name, sheet:ROSTER.sheetName };
+  } catch (err) { ROSTER = old; alert("讀取失敗:" + err.message); return; }
+
+  // 出海計畫的姓名對應是快取在 day._linked 上的,換名冊後要全部重算
+  for (const day of PLAN.days.values()) {
+    day._linked = false;
+    for (const t of day.teams) for (const m of t.members) m.person = null;
+  }
+  CAND = null; DRAFT = null;
+
+  // 設定裡的人名可能在新總表找不到
+  const names = new Set(ROSTER.people.map(p => p.name));
+  const miss = new Set();
+  for (const k of ["exclude","leader_order","night_fixed"])
+    (S[k]||[]).forEach(n => { if (!names.has(n)) miss.add(n); });
+  for (const k of ["avoid_pairs","bind_pairs"])
+    (S[k]||[]).forEach(pr => pr.forEach(n => { if (!names.has(n)) miss.add(n); }));
+  Object.keys(S.overtime||{}).forEach(n => { if (!names.has(n)) miss.add(n); });
+
+  const lastPlan = PLAN.dates[PLAN.dates.length-1];
+  ALLDATES = PLAN.dates.concat([...ROSTER.dateCol.keys()].filter(d => d > lastPlan).sort());
+  if (!ALLDATES.includes(DAY)) { DAY = lastPlan; dateCombo.setValue(DAY); }
+  $("#files").innerHTML =
+    `<b>${esc(ROSTER_INFO.file)}</b> · ${esc(ROSTER_INFO.sheet)} · ${ROSTER.people.length} 人　　` +
+    `<b>${esc(PLAN_INFO.file)}</b> · ${esc(PLAN_INFO.sheet)} · ${PLAN.dates.length} 天 ` +
+    `(${PLAN.dates[0]} ~ ${lastPlan})`;
+  loadDay();
+  if (PRE) renderAhead();          // 換了總表,下兩輪那幾天的檢核要重算
+  tab("overview");
+  const box = el("div","note");
+  box.innerHTML = `<b>已換成 ${esc(f.name)}</b> —— ${ROSTER.people.length} 人,` +
+    `日期到 ${[...ROSTER.dateCol.keys()].sort().pop()}。設定和草稿沒有被清掉。` +
+    (miss.size ? `<br>不過設定裡有 <b>${miss.size}</b> 位在新總表找不到:` +
+      esc([...miss].slice(0,10).join("、")) + `,那幾筆設定會自動失效,建議到設定頁確認一下。` : "");
+  $("#wnote").prepend(box);
+};
+$("#swap").onclick = () => swapInput.click();
+
+$("#reload").onclick = () => {
+  ROSTER = PLAN = DAY = null; CAND = null; DRAFT = null;
+  $("#app").classList.add("hide"); $("#start").classList.remove("hide");
+  $("#d1").classList.remove("on"); $("#d2").classList.remove("on");
+  $("#n1").textContent = "人力總表　尚未選取";
+  $("#n2").textContent = "每日出海計畫　尚未選取";
+  prog(""); $("#startwarn").classList.add("hide"); $("#picker").value = "";
+};
+if (!("DecompressionStream" in window)) {
+  $("#startwarn").classList.remove("hide");
+  $("#startwarn").textContent = "這個瀏覽器太舊,無法解開 Excel 檔。請改用 Edge 或 Chrome 開啟。";
+}
+</script>
+</body>
+</html>
