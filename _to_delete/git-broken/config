@@ -1,0 +1,14 @@
+[core]
+	repositoryformatversion = 0
+	filemode = false
+	bare = false
+	logallrefupdates = true
+	symlinks = false
+	ignorecase = true
+	autocrlf = false
+[user]
+	name = kyo182p
+	email = kyo182p@gmail.com
+[remote "origin"]
+	url = https://github.com/kyo182p/oakmoss-9c.git
+	fetch = +refs/heads/*:refs/remotes/origin/*
