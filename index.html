@@ -331,7 +331,7 @@ textarea.big{width:100%;min-height:110px;line-height:1.6}
         <button class="btn ghost sm" id="copyall">複製全部隊伍</button>
         <button class="btn ghost sm" data-list="scheduled" data-box="#copybox">已排名單 1.2.3.</button>
         <button class="btn ghost sm" data-list="available" data-box="#copybox">可出海名單 1.2.3.</button>
-        <button class="btn sm" id="exportplan">存成新的出海計畫(原檔格式)</button>
+        <button class="btn sm" id="exportplan">存成新的出海計畫(到這一天為止)</button>
         <button class="btn ghost sm" id="exportx">存成簡表</button>
         <span class="saved hide" id="gmsg"></span>
       </div>
@@ -3047,7 +3047,14 @@ $("#regenAhead").onclick = () => {
 /* 「全部存成新的出海計畫」= 畫面上所有做好的草稿,不只下兩輪那 14 天 */
 $("#exportAhead").onclick = e =>
   exportPlanXlsx(e.currentTarget, [...DRAFTS.keys()].sort().map(d => DRAFTS.get(d)));
-$("#exportplan").onclick = e => exportPlanXlsx(e.currentTarget);
+/* [U] 2026-09-19 Tina:分別存 9/22 和 9/23,得到兩個檔,各自只接一天。
+   要的是「存 9/23 時,9/22 也一起在裡面」—— 所以這顆按鈕存的是這一天以前(含)所有做好的草稿,
+   一個檔就從檔案最後一天一路接到目前這一天,不會有缺日。 */
+$("#exportplan").onclick = e => {
+  if (!DRAFT) { alert("請先按「一鍵產生這一天的草稿」。"); return; }
+  const list = [...DRAFTS.keys()].filter(d => d <= DAY).sort().map(d => DRAFTS.get(d));
+  exportPlanXlsx(e.currentTarget, list);
+};
 $("#exportx").onclick = e => exportXlsx(e.currentTarget);
 $("#copyall").onclick = () => {
   if (!DRAFT) { alert("請先按「一鍵產生這一天的草稿」。"); return; }
