@@ -1047,7 +1047,7 @@ class Plan {
     return out;
   }
   static parseDay(sh, d, r0, r1) {
-    const day = { date:d, teams:[], blocks:{}, weather:"", headRow:r0, endRow:r0 };
+    const day = { date:d, teams:[], blocks:{}, blockRows:{}, weather:"", headRow:r0, endRow:r0 };
     let cur = null;
     const notes = [];
     for (let r = r0+1; r <= r1; r++) {
@@ -1062,6 +1062,7 @@ class Plan {
       if (b && R.NON_SAILING.some(x => x.toLowerCase() === b.trim().toLowerCase())) {
         if (cur && cur.headRow === r) { day.teams.pop(); cur = null; }
         (day.blocks[b.trim()] = day.blocks[b.trim()] || []).push(...Plan.members(sh,r));
+        (day.blockRows[b.trim()] = day.blockRows[b.trim()] || []).push(r);   // 寫回 Excel 時要用
         continue;
       }
       if (b && R.NIGHT.some(k => b.toLowerCase().includes(k)) && cur) cur.night = true;
@@ -1485,6 +1486,22 @@ function returningPeople(plan, roster, base, target) {
     .map(p => ({ name:p.name, level:p.level }));
 }
 
+/* 這一天該寫在 Leave/Training 欄的人。
+   [U] 2026-09-19 Tina:產出的 9/22 把 9/08 的請假名單原封不動抄下來,那些人 9/22 早就回來上班了。
+   [V] 對過 9/14~9/21 檔案裡的 Leave/Training 欄 vs 總表:就是當天代碼 L / T 的出海技師,
+       不含岸上職務(ST、SM),也不含長期都是 L 的人(Andre Fernandes 天天 L,AOC 從來不列他)。 */
+function leaveList(roster, target) {
+  const isLT = c => { const u = (c || "").trim().toUpperCase(); return u === "L" || u === "T"; };
+  const isWork = c => { const u = (c || "").trim().toUpperCase();
+    return u === "W" || u === "OF" || u === "ON" || R.OFFSHORE.includes(u); };
+  return roster.people.filter(p => {
+    if (!roster.isOffshore(p) || !isLT(roster.code(p, target))) return false;
+    // 前 14 天要有上過班的紀錄才算「這一輪請假」;一路 L / fly / 空白的是長假,AOC 不列
+    for (let i = 1; i <= 14; i++) if (isWork(roster.code(p, addDays(target, -i)))) return true;
+    return false;
+  });
+}
+
 /* 出海計畫裡這一天已經排了人嗎(只看檔案,不看畫面上的草稿) */
 const fileHasCrew = (plan, d) =>
   plan.days.has(d) && plan.days.get(d).teams.some(t => t.members.some(m => !m.struck));
@@ -1535,6 +1552,7 @@ function buildDraft(plan, roster, target, S, base) {
   }
   const tswaLeft = autoFill(teams, roster, target, S, used);
   return { target, base, teams, zoneNote, fromFile, tswaLeft,
+           leave: leaveList(roster, target).map(p => p.name),
            // 以檔案自己的內容起頭時,「上一輪漏掉誰」這個問題不成立,漏排的人由檢核的差額去講
            returning: fromFile ? [] : returningPeople(plan, roster, base, target) };
 }
@@ -2205,6 +2223,13 @@ function showReturning(d) {
        ${d.returning.map(p => esc(p.name)+"("+esc(p.level)+")").join("、")}
        <br>複製上一輪的班表時最容易漏掉的就是這些人 —— Jimmy Hsu 就是這樣被漏掉的,請確認要不要補進去。</div>`
     : `<div class="note">這一輪沒有「上一輪整輪沒被排到、這一輪回來」的人,複製基準日不會漏人。</div>`;
+  if (d.leave && d.leave.length) {
+    const w = el("div","note");
+    w.style.borderLeftColor = "var(--ink-3)"; w.style.background = "var(--sunk)";
+    w.innerHTML = `存成 Excel 時,底下 <b>Leave/Training</b> 會寫:${esc(d.leave.join("、"))}` +
+      `(照這一天的總表;Coordinator / Warehouse / Standby 留空給 AOC 填)`;
+    $("#returning").append(w);
+  }
   if (d.tswaLeft && d.tswaLeft.length) {
     const w = el("div","note");
     w.innerHTML = `<b>TSWA 今天是奇數,${esc(d.tswaLeft.join("、"))} 沒排進去。</b>
@@ -2521,6 +2546,14 @@ async function exportPlanXlsx(btn, list) {
         { E:{clear:true}, F:{clear:true}, G:{clear:true}, H:{clear:true},
           I:{clear:true}, J:{clear:true}, K:{clear:true}, L:{clear:true},
           M:{clear:true}, N:{clear:true} });
+    }
+    /* 底下的 Coordinator / Warehouse / Standby / Leave/Training 不是照抄基準日:
+       Leave/Training 寫目標日總表上真的請假、訓練的人;其他三列清空留給 AOC 填。 */
+    const leaveNames = leaveList(ROSTER, dr.target).map(p => shortName(p) + "-" + p.level);
+    for (const [label, rows] of Object.entries(base.blockRows || {})) {
+      const isLeave = /leave|training/i.test(label);
+      const chunks = isLeave ? spread(leaveNames, rows.length) : rows.map(() => "");
+      rows.forEach((r, i) => editAt(r + delta, { D:{ text: chunks[i] || "" } }));
     }
     blocks += body;
     hiRow = cursor + (base.endRow - base.headRow);
