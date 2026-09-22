@@ -2341,7 +2341,12 @@ function renderDraft() {
       why.title = s.why || "";                 // 借調的說明會很長,滑過去看得到全文
       row.append(why);
       const rm = el("button","rm","移除");
-      rm.onclick = () => { team.slots.splice(i,1); renderDraft(); };
+      /* [U] 隊長那一格移除後要留空給人自己選,不能讓下一位隊員自動往上遞補變隊長 —— 他多半沒有隊長資格 */
+      rm.onclick = () => {
+        if (i === 0 && !team.painter) { team.slots[0] = { name:"", kind:"gap", why:"隊長已移除,請選人" }; }
+        else team.slots.splice(i,1);
+        renderDraft();
+      };
       row.append(rm);
       c.append(row);
     });
