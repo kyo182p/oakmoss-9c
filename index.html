@@ -1837,7 +1837,6 @@ function combo(cfg) {
       list.append(d);
     });
     box.append(list);
-    if (cfg.scrollEnd && !q) list.scrollTop = list.scrollHeight;   // 沒在搜尋時,直接看最新的
   };
   const pick = o => { box._label = o.label; inp.value = o.label; close(); cfg.onChange(o.value, o); };
   const move = n => {
@@ -1938,13 +1937,12 @@ function startApp() {
   /* 基準日可以是出海計畫裡的日子,也可以是這個畫面上已經做好的草稿 ——
      出海計畫只寫到 9/14,不開放草稿就永遠沒辦法讓 9/16 參考 9/15。 */
   baseCombo = combo({ value:"", placeholder:"自動(檔案有排就照檔案,否則上一輪)", width:"235px", allowEmpty:true,
-    /* [U] 日期由舊到新一路排下去,草稿只是多一個標記;打開時捲到最底(最新)。 */
+    /* [U] 最新的日期在最上面,一路往下到最舊;草稿只是多一個標記,不另外分段。 */
     options: () => {
       const all = new Set([...PLAN.dates, ...[...DRAFTS.keys()].filter(d => d !== DAY)]);
-      return [...all].sort().map(d => ({ value:d, label:d,
+      return [...all].sort().reverse().map(d => ({ value:d, label:d,
         sub: PLAN.days.has(d) ? "" : "畫面上的草稿" }));
     },
-    scrollEnd: true,
     onChange: v => { baseCombo._pick = v; } });
   $("#baseCb").replaceChildren(baseCombo);
   loadDay();
