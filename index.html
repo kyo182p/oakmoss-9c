@@ -426,6 +426,9 @@ const R = {
     //     不能被排、也不算進任何人數核對。
     FMS:["away","不為雲林工作(FMS)"], HL:["away","不為雲林工作(HL)"],
     F2:["away","不為雲林工作(F2)"],
+    // [V] 0927 總表新出現 CTH / MTH / TSH:外派直升機團隊(Andrew、Alvin、Lulu 10 月起),不出海、不算人數
+    CTH:["away","外派直升機團隊(CTH)"], MTH:["away","外派直升機團隊(MTH)"], TSH:["away","外派直升機團隊(TSH)"],
+    out:["other","out"],
     JN1:["other","JN1"], VT:["other","VT"], "?":["unknown","尚未確定"],
     ON:["onshore","留在岸上"], OF:["offshore","已出海"],
   },
@@ -803,6 +806,7 @@ const clean = s => String(s).toLowerCase().replace(/[^a-z ]/g,"").replace(/\s+/g
 const isNameTag = t => !t || t.toUpperCase() === t || R.TAGS.has(t.toUpperCase());
 // 班表把等級寫在名字後面,可能用「-」也可能只用空白:Graeme.Bissett-ST / Graeme ST
 const LEVEL_RE = new RegExp("[-\\s](" + R.OFFSHORE.concat(R.SHORE).join("|") + ")$", "i");
+const LEVEL_PREFIX_RE = new RegExp("^(" + R.OFFSHORE.concat(R.SHORE).join("|") + ")[-/]\\s*(?=[A-Za-z])", "i");
 
 function rosterKeys(name) {
   let s = name.trim();
@@ -833,20 +837,46 @@ function parseToken(tok) {
   let level = "";
   const lm = t.match(LEVEL_RE);
   if (lm) { level = lm[1].toUpperCase(); t = t.slice(0, lm.index); }
+  const lp = t.match(LEVEL_PREFIX_RE);            // HV-Nick Bond 這種等級寫在前面的
+  if (lp) { level = level || lp[1].toUpperCase(); t = t.slice(lp[0].length); }
   const display = t.replace(/[._]+/g," ").replace(/\s+/g," ").trim();
-  return { display, prefix, level, key: clean(display) };
+  // 比對用的 key 把括號整個拿掉:Chun Chen(CT)、Andrew Fang (CT)、Hiba (7/27沒有Ko) 都只留人名
+  const forKey = display.replace(/\([^)]*\)/g, " ");
+  return { display, prefix, level, key: clean(forKey) };
 }
+const dice = (a, b) => {
+  let same = 0;
+  const used = new Array(a.length).fill(false);
+  for (const ch of b) {
+    const j = [...a].findIndex((c,i) => !used[i] && c === ch);
+    if (j >= 0) { used[j] = true; same++; }
+  }
+  return (2*same) / (a.length + b.length);
+};
 function fuzzy(key, index) {
+  /* [U] 2026-09-27 Tina:Ryan.Chen 被認成 Chen, YiAn (Kenneth)(MT)。
+     "ryan chen" 對 "yian chen" 只差一個字母,整串字元比對 0.89 就過關了。
+     所以「名 姓」這種兩段以上的寫法分兩關:
+       1. 姓要完全一樣,名相似 ≥ 0.88(拼法小差異)
+       2. 名要完全一樣,姓相似 ≥ 0.6(姓打錯:Eddie Lain→Lian、Chris Yun→Yin、Marvin Mengle→Mengel)
+     只有一段的(只寫名字)才用整串比。 */
+  const parts = key.split(" ");
   let best = null, bestScore = 0;
+  if (parts.length >= 2) {
+    const fam = parts[parts.length - 1], given = parts.slice(0, -1).join(" ");
+    for (const k of index.keys()) {
+      const kp = k.split(" "); if (kp.length < 2) continue;
+      const kf = kp[kp.length - 1], kg = kp.slice(0, -1).join(" ");
+      let score = 0;
+      if (kf === fam) score = dice(given, kg) >= 0.88 ? 1 + dice(given, kg) : 0;
+      else if (kg === given) score = dice(fam, kf) >= 0.6 ? dice(fam, kf) : 0;
+      if (score > bestScore) { bestScore = score; best = k; }
+    }
+    return best ? index.get(best) : null;
+  }
   for (const k of index.keys()) {
     if (Math.abs(k.length - key.length) > 3) continue;
-    let same = 0;
-    const used = new Array(key.length).fill(false);
-    for (const ch of k) {
-      const j = [...key].findIndex((c,i) => !used[i] && c === ch);
-      if (j >= 0) { used[j] = true; same++; }
-    }
-    const score = (2*same) / (k.length + key.length);
+    const score = dice(key, k);
     if (score > bestScore) { bestScore = score; best = k; }
   }
   return bestScore >= 0.88 ? index.get(best) : null;
@@ -945,7 +975,14 @@ class Roster {
       const uniq = new Set(hits.map(k => this.index.get(k).name));
       if (uniq.size === 1) p = this.index.get(hits[0]);
     }
-    if (!p) p = this.givenIndex.get(key) || null;
+    if (!p) {
+      const parts = key.split(" ");
+      if (parts.length >= 2) {
+        // 「名 姓」:名在全場只有一個人叫,而且那個人的姓也對得上,才認(Ryan Chen → Chen, GuoXin (Ryan GX))
+        const g = this.givenIndex.get(parts[0]), fam = parts[parts.length - 1];
+        if (g && [...rosterKeys(g.name)].some(k => k.split(" ").includes(fam))) p = g;
+      } else p = this.givenIndex.get(key) || null;
+    }
     if (!p) p = fuzzy(key, this.index);
     this.findCache.set(key, p || null);
     return p || null;
