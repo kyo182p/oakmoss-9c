@@ -367,6 +367,7 @@ textarea.big{width:100%;min-height:110px;line-height:1.6}
         <button class="btn" id="gen">一鍵產生這一天的草稿</button>
         <span style="font-size:13px;color:var(--ink-3)">基準日</span>
         <span id="baseCb"></span>
+        <button class="btn ghost sm" id="addteam">＋ 隊伍</button>
         <button class="btn ghost sm" id="dropdraft">丟掉這一天的草稿</button>
         <button class="btn ghost sm" id="copyall">複製全部隊伍</button>
         <button class="btn ghost sm" data-list="scheduled" data-box="#copybox">已排名單 1.2.3.</button>
@@ -830,12 +831,13 @@ function editRow(rowXml, rowNum, edits) {
     const m = out.match(re);
     const attrs = m ? m[1].replace(/\s*t="[^"]*"/g, "") : "";
     let cell;
-    if (e.clear) cell = `<c r="${col}${rowNum}"${attrs}/>`;
+    if (e.clear || (e.num === undefined && !String(e.text ?? "").trim()))   // 空字串 = 清掉,不留空的字串格
+      cell = `<c r="${col}${rowNum}"${attrs}/>`;
     else if (e.num !== undefined) cell = `<c r="${col}${rowNum}"${attrs}><v>${e.num}</v></c>`;
     else cell = `<c r="${col}${rowNum}"${attrs} t="inlineStr">` +
                 `<is><t xml:space="preserve">${xEsc(e.text)}</t></is></c>`;
     if (m) { out = out.slice(0, m.index) + cell + out.slice(m.index + m[0].length); continue; }
-    if (e.clear) continue;
+    if (e.clear || (e.num === undefined && !String(e.text ?? "").trim())) continue;
     // 這一欄原本沒有儲存格 → 照欄序插進去
     let pos = -1;
     for (const cm of out.matchAll(/<c r="([A-Z]+)\d+"/g))
@@ -2409,6 +2411,62 @@ function releaseFrom(name, keepTeam) {
   }
 }
 
+/* ---------- ＋隊伍 ----------
+   [U] 2026-10-04 Tina:固定 9 隊,特殊情況要加第 10 隊。按鈕選「哪一組」(Lugang / Xingang 日班 / Pharos…),
+       序號自動補那一組缺的號碼,人自己選。這一天的草稿拿去當別天的基準時,新加的隊也會跟著複製。 */
+const teamSeries = name => {
+  const m = String(name || "").trim().match(/^(.*?)\s*(\d+)\s*$/);
+  return m ? { base: m[1].trim(), num: +m[2] } : { base: String(name || "").trim(), num: 0 };
+};
+function seriesOf(teams) {
+  const map = new Map();                       // key: base|night → { base, night, vessel, worktype, nums[] }
+  for (const t of teams) {
+    const { base, num } = teamSeries(t.name);          // painter 的 Snail 3 也要算進序號,免得新隊撞名
+    const k = base + "|" + (t.night ? 1 : 0);
+    if (!map.has(k)) map.set(k, { base, night: !!t.night, vessel: t.vessel, worktype: t.worktype, nums: [] });
+    const e = map.get(k); if (num) e.nums.push(num);
+    if (!e.worktype && t.worktype) e.worktype = t.worktype;
+  }
+  for (const e of map.values()) {
+    e.nums.sort((a, b) => a - b);
+    let n = 1; while (e.nums.includes(n)) n++;   // 補缺的序號:1,3 → 2;1,2,3 → 4
+    e.next = n;
+  }
+  return [...map.values()];
+}
+function addTeamDialog() {
+  if (!DRAFT) { alert("請先按「一鍵產生這一天的草稿」。"); return; }
+  const old = $("#addTeamBox"); if (old) old.remove();
+  const box = el("div","note"); box.id = "addTeamBox";
+  box.style.borderLeftColor = "var(--navy)"; box.style.background = "var(--navy-soft)";
+  const series = seriesOf(DRAFT.teams);
+  const sel = el("select");
+  series.forEach((e, i) => {
+    const o = el("option"); o.value = i;
+    o.textContent = `${e.base}${e.night ? "(夜班)" : ""} → ${e.base} ${e.next}　(${e.vessel}${e.worktype ? "・" + e.worktype : ""})`;
+    sel.append(o);
+  });
+  const wt = el("input"); wt.placeholder = "工作類型(TS / AS / HV…)"; wt.style.width = "150px";
+  const sync = () => { wt.value = series[+sel.value] ? (series[+sel.value].worktype || "") : ""; };
+  sel.onchange = sync; sync();
+  const ok = el("button","btn sm","新增這一隊"), cancel = el("button","btn ghost sm","取消");
+  ok.onclick = () => {
+    const e = series[+sel.value]; if (!e) return;
+    const team = { name: `${e.base} ${e.next}`, vessel: e.vessel, worktype: wt.value.trim() || e.worktype || "",
+                   night: e.night, painter: false, added: true,
+                   slots: [{ name:"", kind:"gap", why:"新隊伍,請選隊長" }, { name:"", kind:"gap", why:"新隊伍" },
+                           { name:"", kind:"gap", why:"新隊伍" }] };
+    // 插在同一組最後一隊的後面;找不到就放最後
+    let at = -1;
+    DRAFT.teams.forEach((t, i) => { if (teamSeries(t.name).base === e.base && !!t.night === e.night) at = i; });
+    DRAFT.teams.splice(at + 1, 0, team);
+    box.remove(); renderDraft();
+  };
+  cancel.onclick = () => box.remove();
+  box.append(el("b","","新增隊伍:選哪一組,序號會自動補那一組缺的號碼　"), sel, el("span","","　"), wt, el("span","","　"), ok, el("span","","　"), cancel);
+  $("#dteams").before(box);
+}
+
 function renderDraft() {
   const ev = draftEval();
   $("#dteams").innerHTML = "";
@@ -2416,9 +2474,16 @@ function renderDraft() {
     const seats = team.slots.filter(s => s.name || s.fixed).length;
     const c = el("div","team" + (team.night?" night":"") + (team.painter?" painter":"") +
                     (ev.badTeams.has(team.name)?" bad":""));
-    c.append(el("div","th",
-      `<span class="tn">${esc(team.name)}</span><span class="tv">${esc(team.vessel)}</span>`));
+    const th = el("div","th",
+      `<span class="tn">${esc(team.name)}${team.added ? ' <span class="tag p">新增</span>' : ""}</span><span class="tv">${esc(team.vessel)}</span>`);
+    c.append(th);
     c.append(el("div","tags", teamTags(team, seats)));
+    if (team.added) {
+      const del = el("button","rm","刪除這一隊");
+      del.style.marginBottom = "6px";
+      del.onclick = () => { DRAFT.teams.splice(DRAFT.teams.indexOf(team), 1); renderDraft(); };
+      c.append(del);
+    }
 
     team.slots.forEach((s, i) => {
       if (s.fixed) { c.append(el("div","fixedmem", esc(s.fixed) + "　(外部支援 / painter)")); return; }
@@ -2584,10 +2649,10 @@ async function exportPlanXlsx(btn, list) {
     const p = ROSTER.byName.get(x.name);
     return p ? shortName(p) + "-" + p.level : x.name;
   }).filter(Boolean);
-
+  const ROW_RE = /<row r="(\d+)"[^>]*?(?:\/>|>[\s\S]*?<\/row>)/g;
   const rowRe = r => new RegExp(`<row r="${r}"[^>]*?(?:/>|>[\\s\\S]*?</row>)`);
   const sliceRows = (from, to) => {
-    const re = /<row r="(\d+)"[^>]*?(?:\/>|>[\s\S]*?<\/row>)/g;
+    const re = new RegExp(ROW_RE.source, "g");
     let start = -1, end = -1, m;
     while ((m = re.exec(xml))) {
       const r = +m[1];
@@ -2597,92 +2662,149 @@ async function exportPlanXlsx(btn, list) {
     }
     return start < 0 ? null : { text: xml.slice(start, end), start, end };
   };
+  const renumber = (rowXml, r) => rowXml.replace(/<row r="\d+"/, `<row r="${r}"`)
+                                        .replace(/<c r="([A-Z]+)\d+"/g, (_, c) => `<c r="${c}${r}"`);
+  const CLEAR_EN = { E:{clear:true}, F:{clear:true}, G:{clear:true}, H:{clear:true}, I:{clear:true},
+                     J:{clear:true}, K:{clear:true}, L:{clear:true}, M:{clear:true}, N:{clear:true} };
 
-  const updated = [], added = [], skipped = [];
+  /* 把一天「組」出來:以檔案裡的 day 當版面,填進草稿 dr 的人。
+     [U] 2026-10-04 Tina:草稿可以加第 10 隊。版面裡沒有的隊伍,就複製同一組最後一隊的那幾列
+         (Lugang 3 的版型給 Lugang 4 用),接在那一組後面,後面的列全部往下推。
+     isNew = 這一天在檔案裡不存在(整段複製基準日):會改日期、清掉工單欄、重寫底下的 Leave/Training。
+     回傳的 text 已經從 startRow 連號編好。 */
+  function composeDay(day, dr, startRow, isNew) {
+    const seg = sliceRows(day.headRow, day.endRow);
+    if (!seg) return null;
+    const rows = [...seg.text.matchAll(new RegExp(ROW_RE.source, "g"))].map(m => ({ r:+m[1], xml:m[0] }));
+    const byR = new Map(rows.map(x => [x.r, x.xml]));
+    const items = rows.map(x => ({ orig:x.r, xml:x.xml, edits:{} }));
+    const at = r => items.find(it => it.orig === r);
+    const edit = (r, e) => { const it = at(r); if (it) Object.assign(it.edits, e); };
 
-  // ---- 先處理已經存在的日子(只改格子,不動列數,所以位置不會跑掉) ----
-  for (const dr of drafts) {
-    if (!PLAN.days.has(dr.target)) continue;
+    if (isNew) edit(day.headRow, { A:{ num: dateSerial(dr.target) },
+                                   B:{ text: WEEKDAY[new Date(dr.target + "T00:00:00Z").getUTCDay()] } });
+    for (const bt of day.teams) {
+      const dt = dr.teams.find(x => x.name === bt.name && x.night === bt.night);
+      const rowsForD = bt.dRows.length ? bt.dRows : [bt.headRow];
+      if (!dt && !isNew) continue;                       // 既有日子:草稿沒這一隊就不動它
+      const chunks = dt ? spread(nameOf(dt), rowsForD.length) : rowsForD.map(() => "");
+      rowsForD.forEach((r, i) => edit(r, { D:{ text: chunks[i] || "" } }));
+      if (isNew) for (const r of bt.rows) edit(r, CLEAR_EN);
+    }
+    if (isNew) {
+      const leaveNames = leaveList(ROSTER, dr.target).map(p => shortName(p) + "-" + p.level);
+      for (const [label, brs] of Object.entries(day.blockRows || {})) {
+        const chunks = /leave|training/i.test(label) ? spread(leaveNames, brs.length) : brs.map(() => "");
+        brs.forEach((r, i) => edit(r, { D:{ text: chunks[i] || "" } }));
+      }
+    }
+
+    // ---- 版面裡沒有的隊伍(新加的第 10 隊)----
+    const extras = dr.teams.filter(dt => !dt.painter &&
+      !day.teams.some(bt => bt.name === dt.name && bt.night === dt.night));
+    const lastOfSeries = new Map();        // base|night → 目前這一組最後一列在 items 的位置
+    for (const dt of extras) {
+      const { base } = teamSeries(dt.name);
+      const key = base + "|" + (dt.night ? 1 : 0);
+      let tmpl = [...day.teams].reverse().find(t => !t.painter && teamSeries(t.name).base === base && !!t.night === !!dt.night)
+              || [...day.teams].reverse().find(t => !t.painter && !!t.night === !!dt.night)
+              || day.teams[day.teams.length - 1];
+      if (!tmpl) continue;
+      const trs = [...tmpl.rows].sort((a,b) => a - b);
+      const dIdx = (tmpl.dRows.length ? tmpl.dRows : [tmpl.headRow]).map(r => trs.indexOf(r)).filter(i => i >= 0);
+      const chunks = spread(nameOf(dt), dIdx.length);
+      const clones = [];
+      trs.forEach((r, i) => {
+        const src = byR.get(r); if (!src) return;
+        const e = { ...CLEAR_EN, D:{ text: "" } };
+        if (i === 0) Object.assign(e, { A:{ text: dt.worktype || "" }, B:{ text: dt.vessel || "" }, C:{ text: dt.name } });
+        const di = dIdx.indexOf(i); if (di >= 0) e.D = { text: chunks[di] || "" };
+        clones.push({ orig:null, xml: src, edits: e });
+      });
+      let idx = -1;
+      if (lastOfSeries.has(key)) idx = lastOfSeries.get(key);
+      else items.forEach((it, i) => { if (it.orig != null && it.orig <= trs[trs.length - 1]) idx = i; });  // 範本最後一列(空列可能沒有元素)
+      if (idx < 0) idx = items.length - 1;
+      items.splice(idx + 1, 0, ...clones);
+      lastOfSeries.set(key, idx + clones.length);
+      // 後面同一組若還要插,位置要跟著後移;其他組的紀錄也要修正
+      for (const [k2, v] of lastOfSeries) if (k2 !== key && v > idx) lastOfSeries.set(k2, v + clones.length);
+    }
+
+    // ---- 從 startRow 開始編號(原本列與列之間的空號保留;插進來的連號) ----
+    let cur = startRow - 1, prevOrig = null;
+    for (const it of items) {
+      if (it.orig != null) { cur += prevOrig == null ? 1 : (it.orig - prevOrig); prevOrig = it.orig; }
+      else cur += 1;
+      it.xml = editRow(renumber(it.xml, cur), cur, it.edits);
+    }
+    const span0 = day.endRow - day.headRow;
+    return { text: items.map(it => it.xml).join(""), endRow: cur, grew: (cur - startRow) - span0,
+             extras: extras.map(t => t.name) };
+  }
+
+  /* 既有日子多了幾列 → 這一天「之後」的所有列、以及尾巴裡指到那些列的位址,全部往下推 K 列。
+     只處理傳進來的那一段(這一天之後的部分),剛組好的那一天本身不能再推一次。 */
+  function shiftRest(rest, afterRow, K) {
+    if (!K) return rest;
+    const sd = rest.indexOf("</sheetData>");
+    let body = rest.slice(0, sd), tail = rest.slice(sd);
+    body = body.replace(new RegExp(ROW_RE.source, "g"), (whole, r) => +r > afterRow
+      ? whole.replace(/<row r="\d+"/, `<row r="${+r + K}"`).replace(/<c r="([A-Z]+)\d+"/g, (_, c) => `<c r="${c}${+r + K}"`)
+      : whole);
+    const fixRef = txt => txt.replace(/(\$?)([A-Z]{1,3})(\$?)(\d+)/g, (m, d1, col, d2, row) =>
+      +row > afterRow && +row < 1048576 ? `${d1}${col}${d2}${+row + K}` : m);
+    tail = tail.replace(/(ref|sqref)="([^"]*)"/g, (m, k, v) => `${k}="${fixRef(v)}"`)
+               .replace(/<formula>([^<]*)<\/formula>/g, (m, f) => `<formula>${fixRef(f)}</formula>`);
+    return body + tail;
+  }
+
+  const updated = [], added = [], skipped = [], extraNote = [];
+  let grewTotal = 0;
+
+  // ---- 先處理已經存在的日子:由下往上,這樣往下推列號時不會動到還沒處理的日子 ----
+  const existing = drafts.filter(dr => PLAN.days.has(dr.target))
+    .sort((a, b) => PLAN.days.get(b.target).headRow - PLAN.days.get(a.target).headRow);
+  for (const dr of existing) {
     const day = PLAN.days.get(dr.target);
     const seg = sliceRows(day.headRow, day.endRow);
     if (!seg) { skipped.push(dr.target); continue; }
-    let body = seg.text;
-    for (const dt of dr.teams) {
-      const src = day.teams.find(x => x.name === dt.name && x.night === dt.night);
-      if (!src) continue;
-      const rowsForD = src.dRows.length ? src.dRows : [src.headRow];
-      const chunks = spread(nameOf(dt), rowsForD.length);
-      rowsForD.forEach((r, i) => {
-        const rm = body.match(rowRe(r));
-        if (!rm) return;
-        body = body.slice(0, rm.index) + editRow(rm[0], r, { D:{ text: chunks[i] || "" } }) +
-               body.slice(rm.index + rm[0].length);
-      });
-    }
-    xml = xml.slice(0, seg.start) + body + xml.slice(seg.end);
+    const out = composeDay(day, dr, day.headRow, false);
+    if (!out) { skipped.push(dr.target); continue; }
+    xml = xml.slice(0, seg.start) + out.text + shiftRest(xml.slice(seg.end), day.endRow, out.grew);
+    if (out.grew > 0) grewTotal += out.grew;
+    if (out.extras.length) extraNote.push(`${dr.target} 新增隊伍 ${out.extras.join("、")}(插入 ${out.grew} 列)`);
     updated.push(dr.target);
   }
+  updated.sort();
 
   // ---- 再處理還沒有的日子:一天接一天疊在最後面 ----
   const lastDay = PLAN.days.get(PLAN.dates[PLAN.dates.length - 1]);
-  let cursor = lastDay.endRow + 2;          // 空一列再接
+  const lastEnd = lastDay.endRow + grewTotal;
+  let cursor = lastEnd + 2;
   let blocks = "", hiRow = cursor;
-
   for (const dr of drafts) {
     if (PLAN.days.has(dr.target)) continue;
-    // 基準日本身可能也是草稿(9/16 參考 9/15),版面要一路往回找到檔案裡真的有的那一天
     const base = layoutDay(PLAN, dr.base);
-    const seg = base ? sliceRows(base.headRow, base.endRow) : null;
-    if (!seg) { skipped.push(dr.target); continue; }
-    const delta = cursor - base.headRow;
-    let body = seg.text
-      .replace(/<row r="(\d+)"/g, (_, r) => `<row r="${+r + delta}"`)
-      .replace(/<c r="([A-Z]+)(\d+)"/g, (_, c, r) => `<c r="${c}${+r + delta}"`);
-    const editAt = (r, edits) => {
-      const rm = body.match(rowRe(r));
-      if (!rm) return;
-      body = body.slice(0, rm.index) + editRow(rm[0], r, edits) + body.slice(rm.index + rm[0].length);
-    };
-    editAt(base.headRow + delta, {
-      A: { num: dateSerial(dr.target) },
-      B: { text: WEEKDAY[new Date(dr.target + "T00:00:00Z").getUTCDay()] } });
-    for (const bt of base.teams) {
-      const dt = dr.teams.find(x => x.name === bt.name && x.night === bt.night);
-      const rowsForD = bt.dRows.length ? bt.dRows : [bt.headRow];
-      const chunks = dt ? spread(nameOf(dt), rowsForD.length) : rowsForD.map(() => "");
-      rowsForD.forEach((r, i) => editAt(r + delta, { D:{ text: chunks[i] || "" } }));
-      for (const r of bt.rows) editAt(r + delta,
-        { E:{clear:true}, F:{clear:true}, G:{clear:true}, H:{clear:true},
-          I:{clear:true}, J:{clear:true}, K:{clear:true}, L:{clear:true},
-          M:{clear:true}, N:{clear:true} });
-    }
-    /* 底下的 Coordinator / Warehouse / Standby / Leave/Training 不是照抄基準日:
-       Leave/Training 寫目標日總表上真的請假、訓練的人;其他三列清空留給 AOC 填。 */
-    const leaveNames = leaveList(ROSTER, dr.target).map(p => shortName(p) + "-" + p.level);
-    for (const [label, rows] of Object.entries(base.blockRows || {})) {
-      const isLeave = /leave|training/i.test(label);
-      const chunks = isLeave ? spread(leaveNames, rows.length) : rows.map(() => "");
-      rows.forEach((r, i) => editAt(r + delta, { D:{ text: chunks[i] || "" } }));
-    }
-    blocks += body;
-    hiRow = cursor + (base.endRow - base.headRow);
+    const out = base ? composeDay(base, dr, cursor, true) : null;
+    if (!out) { skipped.push(dr.target); continue; }
+    blocks += out.text;
+    hiRow = out.endRow;
     added.push({ date: dr.target, at: cursor, base: dr.base });
+    if (out.extras.length) extraNote.push(`${dr.target} 新增隊伍 ${out.extras.join("、")}`);
     cursor = hiRow + 2;
   }
-
   if (blocks) {
-    /* Excel 要求 <row> 的列號由小到大排;只要有一列順序不對,整個檔就會被判定
-       「無法讀取的內容」而打不開。新區塊從 lastDay.endRow+2 起算,所以中間那一列
-       空白列(endRow+1)也一定要一起清掉,否則它會被擠到新區塊後面,列號就倒退了。 */
-    const lo = lastDay.endRow + 1;
-    xml = xml.replace(/<row r="(\d+)"[^>]*?(?:\/>|>[\s\S]*?<\/row>)/g,
-      (whole, r) => (+r >= lo && +r <= hiRow) ? "" : whole);
-    const anchor = xml.match(rowRe(lastDay.endRow));
-    if (anchor) xml = xml.slice(0, anchor.index + anchor[0].length) + blocks +
-                      xml.slice(anchor.index + anchor[0].length);
+    /* Excel 要求 <row> 列號遞增;新區塊從 lastEnd+2 起,中間那一列空白列也要清掉 */
+    const lo = lastEnd + 1;
+    xml = xml.replace(new RegExp(ROW_RE.source, "g"), (whole, r) => (+r >= lo && +r <= hiRow) ? "" : whole);
+    const anchor = xml.match(rowRe(lastEnd));
+    if (anchor) xml = xml.slice(0, anchor.index + anchor[0].length) + blocks + xml.slice(anchor.index + anchor[0].length);
     else xml = xml.replace("</sheetData>", blocks + "</sheetData>");
   }
 
+  xml = xml.replace(/<dimension ref="([A-Z]+)1:([A-Z]+)(\d+)"\/>/, (m, a, b, r) =>
+    `<dimension ref="${a}1:${b}${Math.max(+r + grewTotal, hiRow)}"/>`);
   const blob = await rebuildXlsx(zip, { [part]: xml });
   const stem = PLAN_INFO.file.replace(/\.xlsx$/i, "");
   const tag = drafts.length === 1 ? drafts[0].target.replace(/-/g,"")
@@ -2698,6 +2820,7 @@ async function exportPlanXlsx(btn, list) {
   if (updated.length) lines.push(`更新既有日期 ${updated.length} 天:${updated.join("、")}`);
   if (added.length) lines.push(`新增 ${added.length} 天,從第 ${added[0].at} 列開始:` +
     added.map(x => x.date).join("、"));
+  if (extraNote.length) lines.push(extraNote.join("\n"));
   if (skipped.length) lines.push(`跳過 ${skipped.length} 天(找不到基準日的版面):${skipped.join("、")}`);
   alert(lines.join("\n") + "\n\n已另存為:" + fname +
         "\n(" + (blob.size/1e6).toFixed(1) + " MB)" +
@@ -3271,6 +3394,7 @@ $("#next").onclick = () => { const i = ALLDATES.indexOf(DAY)+1;
 $("#gen").onclick = genDraft;
 document.querySelectorAll("button[data-list]").forEach(b =>
   b.onclick = () => showList(b.dataset.list, b.dataset.box, b));
+$("#addteam").onclick = addTeamDialog;
 $("#dropdraft").onclick = () => {
   if (!DRAFTS.has(DAY)) { alert("這一天本來就沒有草稿。"); return; }
   if (!confirm(`要丟掉 ${DAY} 的草稿嗎?丟掉之後這一天就回到「還沒排」的狀態。`)) return;
