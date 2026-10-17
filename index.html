@@ -201,6 +201,35 @@ input:focus-visible,textarea:focus-visible,button:focus-visible{
 .card{background:var(--surface);border:1px solid var(--rule);border-radius:4px;
   padding:14px 16px;margin-bottom:12px}
 .card .hint{font-size:12.5px;color:var(--ink-3);margin:-4px 0 10px;max-width:76ch}
+
+/* ---------- 個人班表 ---------- */
+.pc-top{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.pc-top .who{font-size:13px;color:var(--ink-2)}
+.pc-legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;color:var(--ink-3);margin-bottom:14px}
+.pc-legend i{display:inline-block;width:13px;height:13px;border-radius:3px;vertical-align:-2px;margin-right:5px;border:1px solid var(--rule-2)}
+.pc-months{display:grid;grid-template-columns:repeat(auto-fill,minmax(400px,1fr));gap:14px}
+.pc-m{background:var(--surface);border:1px solid var(--rule);border-radius:4px;padding:12px 14px 14px}
+.pc-m.cur{border-color:var(--buoy)}
+.pc-m header{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;gap:8px}
+.pc-m h2{margin:0;font-size:16px}
+.pc-m .s{font-size:11.5px;color:var(--ink-3);text-align:right}
+.pc-g{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.pc-h{text-align:center;font-size:11.5px;color:var(--ink-3);padding:1px 0 3px}
+.pc-h.we{color:var(--stop)}
+.pc-c{height:46px;border-radius:4px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;
+  font-size:11px;background:transparent;border:1px dashed var(--rule);color:var(--ink-3)}
+.pc-c .n{font-weight:600;font-size:13px}
+.pc-c .t{line-height:1;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 3px}
+.pc-c.empty{background:transparent;border:none}
+.pc-c.offshore{background:var(--navy);border-color:var(--navy);color:#fff}
+.pc-c.onshore{background:var(--ok-soft);border:1px solid var(--ok);color:var(--ok)}
+.pc-c.work{background:var(--navy-soft);border:1px solid var(--navy);color:var(--navy)}
+.pc-c.off{background:var(--warn-soft);border:1px solid var(--warn);color:var(--warn)}
+.pc-c.away{background:var(--sunk);border:1px solid var(--rule);color:var(--ink-2);text-decoration:line-through}
+.pc-c.other{background:var(--sunk);border:1px solid var(--rule);color:var(--ink-2)}
+.pc-c.today{outline:2px solid var(--ink);outline-offset:-2px}
+.pc-c.sel{box-shadow:inset 0 0 0 2px var(--buoy)}
+.pc-empty{color:var(--ink-3);font-size:13.5px;padding:20px 0}
 .chk{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:2px 10px;
   max-height:250px;overflow:auto;border:1px solid var(--rule-2);padding:8px;border-radius:3px}
 .chk label{display:flex;gap:6px;align-items:center;font-size:13px;padding:1px 0}
@@ -345,6 +374,7 @@ textarea.big{width:100%;min-height:110px;line-height:1.6}
     <button data-tab="issues">檢核<span class="badge hide" id="ibadge">0</span></button>
     <button data-tab="settings">設定</button>
     <button data-tab="notes">留言</button>
+    <button data-tab="person">個人班表</button>
   </div>
 
   <div class="wrap">
@@ -408,6 +438,7 @@ textarea.big{width:100%;min-height:110px;line-height:1.6}
 
     <div id="tab-settings" class="hide"><div id="settings"></div></div>
     <div id="tab-notes" class="hide"><div id="notes"></div></div>
+    <div id="tab-person" class="hide"><div id="person"></div></div>
   </div>
 </div>
 
@@ -2135,10 +2166,11 @@ function renderAhead() {
 
 function tab(name) {
   document.querySelectorAll(".nav button").forEach(b => b.classList.toggle("on", b.dataset.tab === name));
-  ["overview","plan","ahead","issues","settings","notes"].forEach(t =>
+  ["overview","plan","ahead","issues","settings","notes","person"].forEach(t =>
     $("#tab-"+t).classList.toggle("hide", t !== name));
   if (name === "settings" && !CAND) buildSettings();
   if (name === "notes") buildNotes();
+  if (name === "person") buildPerson();
   if (name === "ahead" && PRE) renderAhead();     // 草稿可能被改過,重算一次
 }
 
@@ -3167,6 +3199,121 @@ function snapshot() {
                (ev.issues.length > 5 ? ` …等 ${ev.issues.length} 則` : ""));
   return { state: lines.join("\n"), settings: JSON.parse(JSON.stringify(S)),
            day: DAY, base: DRAFT ? DRAFT.base : null, summary: ev ? ev.summary : null };
+}
+
+/* ================= 個人班表 =================
+   把總表(Allowance 分頁)裡任何一個人的那一列畫成月曆。
+   只讀總表,不改任何東西;代碼的意思沿用 R.CODE,總表空白就留灰底。 */
+let PERSON = "", personCombo = null;
+const PCODE = {   // 月曆格子上顯示的短字,沒列到的代碼就直接顯示原字
+  OF:"出海", ON:"岸上", w:"上班", L:"請假", T:"訓練", H:"假日", x:"休假", v:"休假",
+  fly:"出差", CTH:"直升機", MTH:"直升機", TSH:"直升機", "?":"未定",
+};
+function personCell(code) {
+  const c = String(code || "").trim();
+  if (!c) return { cls:"", label:"" };
+  const hit = R.CODE[c] || R.CODE[c.toLowerCase()] || R.CODE[c.toUpperCase()];
+  const cat = hit ? hit[0]
+    : (R.OFFSHORE.includes(c.toUpperCase()) || R.SHORE.includes(c.toUpperCase())) ? "work" : "other";
+  const cls = cat === "offshore" ? "offshore" : cat === "onshore" ? "onshore"
+    : cat === "work" ? "work" : ["leave","training","holiday","off","travel"].includes(cat) ? "off"
+    : cat === "away" ? "away" : "other";
+  const label = PCODE[c] ?? PCODE[c.toLowerCase()] ?? PCODE[c.toUpperCase()] ?? c;
+  return { cls, label };
+}
+function buildPerson() {
+  const host = $("#person");
+  if (!ROSTER) { host.innerHTML = `<div class="pc-empty">先載入人力總表,才有人可以看。</div>`; return; }
+  host.innerHTML = "";
+  const top = el("div","pc-top");
+  if (!personCombo) {
+    personCombo = combo({ value:"", placeholder:"輸入名字搜尋…", width:"280px",
+      options: () => {
+        const out = []; let g = null;
+        const list = ROSTER.people.concat(ROSTER.hiddenPeople);
+        for (const p of list) {
+          const grp = p.hidden ? "已隱藏(資料留著但不排班)" : (p.group || "其他");
+          if (grp !== g) { g = grp; out.push({ head:true, label:g }); }
+          out.push({ value:p.name, label:p.name, lv:p.level, sub:p.hidden ? "隱藏" : "" });
+        }
+        return out;
+      },
+      onChange: v => { PERSON = v; renderPerson(); } });
+    if (PERSON) personCombo.setValue(PERSON);
+  }
+  top.append(personCombo);
+  const who = el("span","who");
+  who.id = "pc-who";
+  top.append(who);
+  host.append(top);
+  const legend = el("div","pc-legend",
+    `<span><i style="background:var(--navy);border-color:var(--navy)"></i>OF 出海</span>
+     <span><i style="background:var(--navy-soft);border-color:var(--navy)"></i>上班 / 等級代碼</span>
+     <span><i style="background:var(--ok-soft);border-color:var(--ok)"></i>ON 岸上</span>
+     <span><i style="background:var(--warn-soft);border-color:var(--warn)"></i>請假・訓練・休假・出差</span>
+     <span><i style="border:1px dashed var(--rule)"></i>總表空白(一般就是休)</span>
+     <span><i style="outline:2px solid var(--ink);outline-offset:-2px"></i>今天</span>
+     <span><i style="box-shadow:inset 0 0 0 2px var(--buoy)"></i>目前選的日期</span>`);
+  host.append(legend);
+  const months = el("div","pc-months"); months.id = "pc-months";
+  host.append(months);
+  renderPerson();
+}
+function renderPerson() {
+  const box = $("#pc-months"), who = $("#pc-who");
+  if (!box) return;
+  box.innerHTML = "";
+  const p = PERSON && ROSTER.byName.get(PERSON);
+  if (!p) { who.textContent = ""; box.innerHTML = `<div class="pc-empty">上面選一個人,就會把他在總表裡的整段班表畫成月曆。</div>`; return; }
+  who.textContent = `${p.level}・${p.group || ""}${p.hidden ? "・總表裡已隱藏" : ""}`;
+  const dates = [...ROSTER.dateCol.keys()].sort();
+  if (!dates.length) { box.innerHTML = `<div class="pc-empty">總表沒有日期欄。</div>`; return; }
+  // 只畫「這個人有填東西」的第一個月到最後一個月;整列空白就畫總表的全部範圍
+  const filled = dates.filter(d => String(ROSTER.code(p,d) || "").trim());
+  const span = filled.length ? filled : dates;
+  const first = span[0].slice(0,7), last = span[span.length-1].slice(0,7);
+  const today = new Date().toISOString().slice(0,10);
+  const months = [];
+  for (let ym = first; ym <= last; ) {
+    months.push(ym);
+    let [y,m] = ym.split("-").map(Number); m++; if (m > 12) { m = 1; y++; }
+    ym = `${y}-${String(m).padStart(2,"0")}`;
+  }
+  let scrollTo = null;
+  for (const ym of months) {
+    const [y,m] = ym.split("-").map(Number);
+    const nDays = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    const lead = (new Date(Date.UTC(y, m-1, 1)).getUTCDay() + 6) % 7;   // 週一開頭
+    const sec = el("section","pc-m" + (ym === today.slice(0,7) ? " cur" : ""));
+    const cnt = {};
+    const g = el("div","pc-g");
+    ["一","二","三","四","五","六","日"].forEach((w,i) => g.append(el("div","pc-h" + (i >= 5 ? " we" : ""), w)));
+    for (let i = 0; i < lead; i++) g.append(el("div","pc-c empty"));
+    for (let d = 1; d <= nDays; d++) {
+      const iso = `${ym}-${String(d).padStart(2,"0")}`;
+      const inSheet = ROSTER.dateCol.has(iso);
+      const code = inSheet ? String(ROSTER.code(p, iso) || "").trim() : "";
+      const { cls, label } = personCell(code);
+      const key = label || (inSheet ? "空白" : "");
+      if (key) cnt[key] = (cnt[key] || 0) + 1;
+      const c = el("div","pc-c" + (cls ? " " + cls : "") + (iso === today ? " today" : "") + (iso === DAY ? " sel" : ""));
+      if (!inSheet) c.style.opacity = ".35";
+      c.title = `${iso}${code ? "  " + code : ""}`;
+      c.innerHTML = `<span class="n">${d}</span><span class="t">${esc(label)}</span>`;
+      g.append(c);
+    }
+    const order = ["出海","岸上","上班","請假","訓練","休假","出差","假日","直升機","空白"];
+    const sum = Object.entries(cnt).sort((a,b) => {
+      const ia = order.indexOf(a[0]), ib = order.indexOf(b[0]);
+      return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || b[1] - a[1];
+    }).map(([k,v]) => `${k} ${v}`).join("・");
+    const head = el("header");
+    head.append(el("h2","",`${y}年${m}月`), el("span","s", esc(sum)));
+    sec.append(head, g);
+    box.append(sec);
+    if (ym === today.slice(0,7)) scrollTo = sec;
+  }
+  if (scrollTo) setTimeout(() => scrollTo.scrollIntoView({ block:"start", behavior:"smooth" }), 50);
 }
 
 function buildNotes() {
