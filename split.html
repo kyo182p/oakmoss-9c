@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>長圖分段工具</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#1f2937;--mute:#6b7280;--line:#e5e7eb;--acc:#123B54;--acc2:#B24E19;--soft:#DEE9EE}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Noto Sans TC","Microsoft JhengHei","PingFang TC",system-ui,sans-serif;padding:20px 16px;max-width:1100px;margin:0 auto}
+h1{font-size:22px;margin:0 0 4px}
+.sub{color:var(--mute);font-size:13.5px;margin-bottom:16px;line-height:1.5}
+.drop{border:2px dashed #b8c4c9;border-radius:12px;padding:34px 20px;text-align:center;background:var(--card);cursor:pointer}
+.drop.over{border-color:var(--acc2);background:#fff7f2}
+.drop b{font-size:16px}
+.drop .sm{color:var(--mute);font-size:13px;margin-top:6px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-top:14px}
+.row{display:flex;gap:18px;flex-wrap:wrap;align-items:flex-end}
+label{font-size:13px;color:var(--mute);display:block;margin-bottom:4px}
+input[type=number],select{font:inherit;padding:6px 9px;border:1px solid #c8d3d6;border-radius:6px;width:120px}
+.btn{background:var(--acc);color:#fff;border:none;border-radius:6px;padding:9px 18px;font:inherit;font-size:14px;cursor:pointer}
+.btn.ghost{background:none;border:1px solid #c8d3d6;color:var(--ink)}
+.btn:disabled{opacity:.45;cursor:default}
+.info{font-size:13px;color:var(--mute);margin-top:8px;line-height:1.6}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-top:12px}
+.seg{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px;text-align:center}
+.seg img{max-width:100%;max-height:220px;border:1px solid var(--line);border-radius:4px;background:#fff}
+.seg .n{font-size:13px;margin:6px 0 4px;font-weight:600;word-break:break-all}
+.seg .d{font-size:12px;color:var(--mute)}
+.seg a{display:inline-block;margin-top:6px;font-size:13px;color:var(--acc2)}
+.hide{display:none}
+.mode{display:flex;gap:10px;flex-wrap:wrap}
+.mode label{display:flex;align-items:center;gap:6px;color:var(--ink);font-size:14px;border:1px solid #c8d3d6;border-radius:8px;padding:8px 12px;cursor:pointer;background:#fff}
+.mode input{margin:0}
+.mode label.on{border-color:var(--acc);background:var(--soft)}
+#status{min-height:20px}
+</style>
+</head>
+<body>
+<h1>長圖分段工具</h1>
+<div class="sub">把 ShareX 滾動截圖那種很高的長圖，切成幾段或排成橫向拼圖，上傳到聊天工具時就不會被壓到看不清楚。<br>全部在瀏覽器裡處理，圖片不會上傳到任何地方。PNG 不限高度（自己解檔，不靠瀏覽器）；JPG 受瀏覽器限制，太高會失敗。</div>
+
+<div class="drop" id="drop">
+  <b>把長圖拖進來、點這裡選檔案，或直接 Ctrl+V 貼上</b>
+  <div class="sm">PNG / JPG 都可以，一次一張</div>
+  <input type="file" id="file" accept="image/*" class="hide">
+</div>
+<div class="info" id="status"></div>
+
+<div class="card hide" id="opts">
+  <div class="info" id="meta"></div>
+  <div class="mode" style="margin:10px 0 14px">
+    <label class="on"><input type="radio" name="mode" value="split" checked>切成多張（每張不超過指定高度）</label>
+    <label><input type="radio" name="mode" value="tile">排成橫向拼圖（一張圖、多欄並排）</label>
+  </div>
+  <div class="row">
+    <div><label>每段最大高度（像素）</label><input type="number" id="maxH" value="6000" min="500" step="500"></div>
+    <div><label>段與段重疊（像素）</label><input type="number" id="overlap" value="120" min="0" step="20"></div>
+    <div><label>放大倍率</label>
+      <select id="scale"><option value="1">1×（原尺寸）</option><option value="1.5">1.5×</option><option value="2">2×</option></select></div>
+    <div><button class="btn" id="go">開始處理</button></div>
+    <div><button class="btn ghost" id="dlAll" disabled>全部下載（zip）</button></div>
+  </div>
+  <div class="info" id="ziplink"></div>
+  <div class="info">
+    建議：要貼到聊天視窗的話，每段高度 6000 以下最保險；重疊是為了避免一行字剛好被切成兩半。
+    「橫向拼圖」會把長圖切段後左右並排成一張寬圖，一次上傳就包含整段對話，適合給 AI 讀（總寬度不能超過 16000）。
+  </div>
+</div>
+
+<div class="grid" id="out"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+let SRC = null;          // { kind:"img", img } 或 { kind:"png", buf, w, h }
+let NAME = "image", BLOBS = [];
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const tick = () => new Promise(r => setTimeout(r, 0));
+const toBlob = c => new Promise(r => c.toBlob(r, "image/png"));
+window.addEventListener("error", e => status("頁面發生錯誤：" + (e.message || e.error), true));
+window.addEventListener("unhandledrejection", e => status("頁面發生錯誤：" + (e.reason?.message || e.reason), true));
+function status(msg, bad) { const st = $("#status"); st.textContent = msg; st.style.color = bad ? "#b91c1c" : "var(--mute)"; }
+
+/* ---------- 收檔 ---------- */
+const drop = $("#drop"), file = $("#file");
+drop.onclick = () => file.click();
+document.addEventListener("dragover", e => { e.preventDefault(); drop.classList.add("over"); });
+document.addEventListener("dragleave", e => { if (!e.relatedTarget) drop.classList.remove("over"); });
+document.addEventListener("drop", e => {
+  e.preventDefault(); drop.classList.remove("over");
+  const f = [...(e.dataTransfer.files || [])].find(x => /^image\//.test(x.type) || /\.(png|jpe?g|webp|bmp|gif)$/i.test(x.name));
+  if (f) load(f); else status("拖進來的不是圖片檔（ShareX 存的 .png 或 .jpg 才行）。", true);
+});
+file.onchange = () => { if (file.files[0]) load(file.files[0]); file.value = ""; };
+document.addEventListener("paste", e => {
+  const it = [...(e.clipboardData?.items || [])].find(i => i.type.startsWith("image/"));
+  if (it) load(it.getAsFile());
+});
+document.querySelectorAll('.mode input').forEach(r => r.onchange = () =>
+  document.querySelectorAll('.mode label').forEach(l => l.classList.toggle("on", l.querySelector("input").checked)));
+
+async function load(f) {
+  NAME = (f.name || "image").replace(/\.[^.]+$/, "") || "image";
+  SRC = null; $("#out").innerHTML = ""; BLOBS = []; $("#dlAll").disabled = true; $("#opts").classList.add("hide");
+  status(`讀取 ${f.name || "剪貼簿圖片"} 中…（${(f.size/1048576).toFixed(1)} MB）`);
+  const buf = await f.arrayBuffer();
+  const u8 = new Uint8Array(buf);
+  const isPng = u8.length > 8 && u8[0] === 0x89 && u8[1] === 0x50 && u8[2] === 0x4E && u8[3] === 0x47;
+  if (isPng) {
+    // PNG 一律自己解,不受瀏覽器尺寸限制
+    try {
+      const hdr = pngHeader(u8);
+      SRC = { kind:"png", u8, w:hdr.w, h:hdr.h, hdr };
+      ready(f.name, hdr.w, hdr.h, "（PNG，自行解檔）");
+    } catch (e) { status("這個 PNG 解不開：" + e.message, true); }
+    return;
+  }
+  // 其他格式交給瀏覽器
+  const url = URL.createObjectURL(f);
+  const im = new Image();
+  im.onload = () => { SRC = { kind:"img", img:im }; ready(f.name, im.naturalWidth, im.naturalHeight, ""); URL.revokeObjectURL(url); };
+  im.onerror = () => status("這個檔案瀏覽器解不開（太高或不是圖片）。請在 ShareX 把影像格式設成 PNG 再截一次，PNG 不限高度。", true);
+  im.src = url;
+}
+function ready(name, w, h, note) {
+  $("#opts").classList.remove("hide");
+  const n = Math.ceil(h / +$("#maxH").value);
+  $("#meta").innerHTML = `已載入 <b>${esc(name || "剪貼簿圖片")}</b>：${w} × ${h} 像素${note}，依目前設定會切成 ${n} 段。`;
+  status("");
+  $("#opts").scrollIntoView({ behavior:"smooth", block:"start" });
+}
+$("#maxH").oninput = () => { if (SRC) { const h = SRC.kind === "png" ? SRC.h : SRC.img.naturalHeight;
+  $("#meta").innerHTML = $("#meta").innerHTML.replace(/切成 \d+ 段/, `切成 ${Math.ceil(h / +$("#maxH").value)} 段`); } };
+
+/* ---------- 分段 ---------- */
+function segments(H, maxH, overlap) {
+  const out = []; let y = 0;
+  while (y < H) {
+    const h = Math.min(maxH, H - y);
+    out.push([y, h]);
+    if (y + h >= H) break;
+    y += h - overlap;
+  }
+  return out;
+}
+
+$("#go").onclick = async () => {
+  if (!SRC) return;
+  const maxH = Math.max(500, +$("#maxH").value || 6000);
+  const overlap = Math.min(maxH - 100, Math.max(0, +$("#overlap").value || 0));
+  const scale = +$("#scale").value || 1;
+  const mode = document.querySelector('.mode input:checked').value;
+  const W = SRC.kind === "png" ? SRC.w : SRC.img.naturalWidth;
+  const H = SRC.kind === "png" ? SRC.h : SRC.img.naturalHeight;
+  const segs = segments(H, maxH, overlap);
+  $("#out").innerHTML = ""; BLOBS = []; status("");
+  $("#go").disabled = true; $("#go").textContent = "處理中…";
+  try {
+    if (mode === "tile") {
+      const cols = segs.length, gap = 24, colH = Math.max(...segs.map(s => s[1]));
+      const tw = Math.round((W * cols + gap * (cols - 1)) * scale), th = Math.round(colH * scale);
+      if (tw > 16000 || th > 16000) {
+        status(`拼圖會變成 ${tw}×${th}，超過瀏覽器能處理的大小。請把「每段最大高度」調大、放大倍率改 1×，或改用「切成多張」。`, true);
+        return;
+      }
+    }
+    // 取得每一段的 canvas(原尺寸),逐段處理
+    const pieces = [];   // tile 模式先存 blob,最後再拼
+    let i = 0;
+    for await (const seg of eachSegment(segs)) {
+      status(`處理第 ${i+1}/${segs.length} 段…`);
+      if (mode === "split") {
+        let c = seg;
+        if (scale !== 1) {
+          c = document.createElement("canvas"); c.width = Math.round(seg.width * scale); c.height = Math.round(seg.height * scale);
+          const g = c.getContext("2d"); g.imageSmoothingQuality = "high"; g.drawImage(seg, 0, 0, c.width, c.height);
+        }
+        const blob = await toBlob(c);
+        addCard(blob, `${NAME}_${String(i+1).padStart(2,"0")}.png`, `第 ${i+1}/${segs.length} 段 · ${c.width}×${c.height}`);
+      } else {
+        pieces.push(await toBlob(seg));
+      }
+      i++; await tick();
+    }
+    if (mode === "tile") {
+      const cols = segs.length, gap = 24, colH = Math.max(...segs.map(s => s[1]));
+      const c = document.createElement("canvas");
+      c.width = Math.round((W * cols + gap * (cols - 1)) * scale); c.height = Math.round(colH * scale);
+      const g = c.getContext("2d"); g.imageSmoothingQuality = "high";
+      g.fillStyle = "#ffffff"; g.fillRect(0, 0, c.width, c.height);
+      for (let k = 0; k < pieces.length; k++) {
+        const bm = await createImageBitmap(pieces[k]);
+        const x = (W + gap) * k * scale;
+        g.drawImage(bm, x, 0, bm.width * scale, bm.height * scale); bm.close();
+        if (k) { g.fillStyle = "#d1d5db"; g.fillRect(x - (gap/2 + 1) * scale, 0, 2 * scale, c.height); }
+        g.fillStyle = "#B24E19"; g.font = `bold ${Math.round(22 * scale)}px sans-serif`; g.fillText(`${k+1}`, x + 8 * scale, 26 * scale);
+      }
+      addCard(await toBlob(c), `${NAME}_拼圖.png`, `${cols} 欄並排 · ${c.width}×${c.height}（由左到右閱讀）`);
+    }
+    status(`完成，共 ${BLOBS.length} 張。`);
+    $("#dlAll").disabled = BLOBS.length === 0;
+  } catch (e) {
+    status("處理失敗：" + e.message, true);
+  } finally {
+    $("#go").disabled = false; $("#go").textContent = "開始處理";
+  }
+};
+
+/* 逐段產生 canvas:瀏覽器能解的用 drawImage,PNG 走自家解碼器串流讀 */
+async function* eachSegment(segs) {
+  if (SRC.kind === "img") {
+    const W = SRC.img.naturalWidth;
+    for (const [y, h] of segs) {
+      const c = document.createElement("canvas"); c.width = W; c.height = h;
+      c.getContext("2d").drawImage(SRC.img, 0, y, W, h, 0, 0, W, h);
+      yield c;
+    }
+    return;
+  }
+  yield* pngSegments(SRC.u8, SRC.hdr, segs);
+}
+
+function addCard(blob, name, desc) {
+  const url = URL.createObjectURL(blob);
+  BLOBS.push({ url, name, blob });
+  const d = document.createElement("div"); d.className = "seg";
+  d.innerHTML = `<img src="${url}" alt=""><div class="n">${esc(name)}</div><div class="d">${esc(desc)}</div><a href="${url}" download="${esc(name)}">下載這張</a>`;
+  $("#out").append(d);
+}
+/* 全部下載:包成一個 zip(瀏覽器一次只肯自動下載一個檔案) */
+$("#dlAll").onclick = async () => {
+  if (!BLOBS.length) return;
+  $("#dlAll").disabled = true; status("打包 zip 中…");
+  try {
+    const files = [];
+    for (const b of BLOBS) files.push({ name: b.name, data: new Uint8Array(await b.blob.arrayBuffer()) });
+    const zip = makeZip(files);
+    const zname = `${NAME}_分段.zip`;
+    const url = URL.createObjectURL(new Blob([zip], { type:"application/zip" }));
+    const a = document.createElement("a"); a.href = url; a.download = zname; document.body.append(a); a.click(); a.remove();
+    // 有些瀏覽器或公司政策會擋自動下載,所以同時留一個看得到的連結
+    const z = $("#ziplink"); z.innerHTML = `zip 已打包好（${(zip.length/1048576).toFixed(1)} MB）。沒有跳出下載的話，<a href="${url}" download="${esc(zname)}">點這裡下載</a>，或在連結上按右鍵「另存連結」。`;
+    status(`已打包 ${files.length} 張成 ${zname}`);
+  } catch (e) { status("打包失敗：" + e.message, true); }
+  finally { $("#dlAll").disabled = false; }
+};
+$("#dlAll").textContent = "全部下載（zip）";
+
+const CRC_T = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crc32(u8) { let c = 0xFFFFFFFF; for (let i = 0; i < u8.length; i++) c = CRC_T[(c ^ u8[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+function makeZip(files) {   // store 模式(PNG 本來就壓過了)
+  const enc = new TextEncoder();
+  const parts = [], central = []; let off = 0;
+  const d = new Date(), dosT = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1), dosD = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+  const u32 = (v, a, o) => { a[o] = v & 255; a[o+1] = (v >>> 8) & 255; a[o+2] = (v >>> 16) & 255; a[o+3] = (v >>> 24) & 255; };
+  const u16 = (v, a, o) => { a[o] = v & 255; a[o+1] = (v >>> 8) & 255; };
+  for (const f of files) {
+    const name = enc.encode(f.name), crc = crc32(f.data);
+    const lh = new Uint8Array(30 + name.length);
+    u32(0x04034b50, lh, 0); u16(20, lh, 4); u16(0x0800, lh, 6); u16(0, lh, 8); u16(dosT, lh, 10); u16(dosD, lh, 12);
+    u32(crc, lh, 14); u32(f.data.length, lh, 18); u32(f.data.length, lh, 22); u16(name.length, lh, 26); u16(0, lh, 28); lh.set(name, 30);
+    const ch = new Uint8Array(46 + name.length);
+    u32(0x02014b50, ch, 0); u16(20, ch, 4); u16(20, ch, 6); u16(0x0800, ch, 8); u16(0, ch, 10); u16(dosT, ch, 12); u16(dosD, ch, 14);
+    u32(crc, ch, 16); u32(f.data.length, ch, 20); u32(f.data.length, ch, 24); u16(name.length, ch, 28); u16(0, ch, 30); u16(0, ch, 32);
+    u16(0, ch, 34); u16(0, ch, 36); u32(0, ch, 38); u32(off, ch, 42); ch.set(name, 46);
+    parts.push(lh, f.data); central.push(ch); off += lh.length + f.data.length;
+  }
+  const cdSize = central.reduce((n, c) => n + c.length, 0);
+  const end = new Uint8Array(22);
+  u32(0x06054b50, end, 0); u16(0, end, 4); u16(0, end, 6); u16(files.length, end, 8); u16(files.length, end, 10); u32(cdSize, end, 12); u32(off, end, 16); u16(0, end, 20);
+  const total = off + cdSize + 22, out = new Uint8Array(total); let o = 0;
+  for (const p of [...parts, ...central, end]) { out.set(p, o); o += p.length; }
+  return out;
+}
+
+/* ---------- 迷你 PNG 解碼器(串流、只保留目前這一段的像素) ---------- */
+function pngHeader(u8) {
+  const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+  let p = 8, w = 0, h = 0, depth = 0, ctype = 0, interlace = 0, plte = null, trns = null;
+  const idat = [];
+  while (p + 8 <= u8.length) {
+    const len = dv.getUint32(p), type = String.fromCharCode(u8[p+4], u8[p+5], u8[p+6], u8[p+7]);
+    const s = p + 8, e = s + len;
+    if (type === "IHDR") { w = dv.getUint32(s); h = dv.getUint32(s+4); depth = u8[s+8]; ctype = u8[s+9]; interlace = u8[s+12]; }
+    else if (type === "PLTE") plte = u8.subarray(s, e);
+    else if (type === "tRNS") trns = u8.subarray(s, e);
+    else if (type === "IDAT") idat.push([s, e]);
+    else if (type === "IEND") break;
+    p = e + 4;
+  }
+  if (!w || !h) throw new Error("找不到 IHDR");
+  if (interlace) throw new Error("是交錯式(interlaced)PNG，不支援；ShareX 預設不會存成這種");
+  if (depth !== 8) throw new Error(`色深 ${depth} 位元不支援，只支援 8 位元（ShareX 預設）`);
+  if (![0,2,3,4,6].includes(ctype)) throw new Error("色彩類型不支援");
+  const ch = { 0:1, 2:3, 3:1, 4:2, 6:4 }[ctype];
+  return { w, h, depth, ctype, ch, plte, trns, idat };
+}
+
+async function* pngSegments(u8, hdr, segs) {
+  const { w: W, ch, ctype, plte, trns, idat } = hdr;
+  const rowLen = 1 + W * ch;
+  // 把 IDAT 丟進 DecompressionStream,邊解壓邊處理
+  const ds = new DecompressionStream("deflate");
+  const writer = ds.writable.getWriter();
+  (async () => { try { for (const [s, e] of idat) await writer.write(u8.subarray(s, e)); await writer.close(); } catch (_) {} })();
+  const reader = ds.readable.getReader();
+
+  let carry = new Uint8Array(0), prev = new Uint8Array(rowLen - 1), cur = new Uint8Array(rowLen - 1);
+  let y = 0, segIdx = 0;
+  let segBuf = null, segRows = 0, segStart = segs[0][0], segH = segs[0][1];
+  const rgba = new Uint8ClampedArray(W * 4);
+  const pending = [];     // 等著輸出的 canvas
+  const newSeg = () => { segBuf = new Uint8ClampedArray(W * 4 * segH); segRows = 0; };
+  newSeg();
+
+  const emitRow = () => {
+    // 轉成 RGBA
+    if (ctype === 6) rgba.set(cur);
+    else if (ctype === 2) for (let x = 0, j = 0; x < W; x++, j += 3) { rgba[x*4] = cur[j]; rgba[x*4+1] = cur[j+1]; rgba[x*4+2] = cur[j+2]; rgba[x*4+3] = 255; }
+    else if (ctype === 0) for (let x = 0; x < W; x++) { const v = cur[x]; rgba[x*4] = v; rgba[x*4+1] = v; rgba[x*4+2] = v; rgba[x*4+3] = 255; }
+    else if (ctype === 4) for (let x = 0; x < W; x++) { const v = cur[x*2]; rgba[x*4] = v; rgba[x*4+1] = v; rgba[x*4+2] = v; rgba[x*4+3] = cur[x*2+1]; }
+    else if (ctype === 3) for (let x = 0; x < W; x++) { const i = cur[x]; rgba[x*4] = plte[i*3]; rgba[x*4+1] = plte[i*3+1]; rgba[x*4+2] = plte[i*3+2]; rgba[x*4+3] = trns && i < trns.length ? trns[i] : 255; }
+    // 這一列屬於哪些段(重疊時可能兩段都要)
+    for (let k = segIdx; k < segs.length; k++) {
+      const [sy, sh] = segs[k];
+      if (y < sy) break;
+      if (y >= sy + sh) continue;
+      if (k === segIdx) { segBuf.set(rgba, (y - sy) * W * 4); segRows++; }
+      else if (k === segIdx + 1) {
+        if (!nextBuf) nextBuf = new Uint8ClampedArray(W * 4 * sh);
+        nextBuf.set(rgba, (y - sy) * W * 4);
+      }
+    }
+    if (y === segStart + segH - 1) {
+      const c = document.createElement("canvas"); c.width = W; c.height = segH;
+      c.getContext("2d").putImageData(new ImageData(segBuf, W, segH), 0, 0);
+      pending.push(c);
+      segIdx++;
+      if (segIdx < segs.length) {
+        segStart = segs[segIdx][0]; segH = segs[segIdx][1];
+        segBuf = nextBuf || new Uint8ClampedArray(W * 4 * segH); nextBuf = null;
+      }
+    }
+    y++;
+  };
+  let nextBuf = null;
+
+  const unfilter = (ft) => {
+    const bpp = ch;
+    if (ft === 0) return;
+    if (ft === 1) { for (let i = bpp; i < cur.length; i++) cur[i] = (cur[i] + cur[i-bpp]) & 255; return; }
+    if (ft === 2) { for (let i = 0; i < cur.length; i++) cur[i] = (cur[i] + prev[i]) & 255; return; }
+    if (ft === 3) { for (let i = 0; i < cur.length; i++) { const a = i >= bpp ? cur[i-bpp] : 0; cur[i] = (cur[i] + ((a + prev[i]) >> 1)) & 255; } return; }
+    if (ft === 4) { for (let i = 0; i < cur.length; i++) {
+      const a = i >= bpp ? cur[i-bpp] : 0, b = prev[i], c = i >= bpp ? prev[i-bpp] : 0;
+      const p = a + b - c, pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c);
+      cur[i] = (cur[i] + (pa <= pb && pa <= pc ? a : pb <= pc ? b : c)) & 255; } return; }
+    throw new Error("未知的 filter " + ft);
+  };
+
+  while (y < hdr.h) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    let buf = value;
+    if (carry.length) { const m = new Uint8Array(carry.length + value.length); m.set(carry); m.set(value, carry.length); buf = m; carry = new Uint8Array(0); }
+    let off = 0;
+    while (off + rowLen <= buf.length && y < hdr.h) {
+      const ft = buf[off];
+      cur.set(buf.subarray(off + 1, off + rowLen));
+      unfilter(ft);
+      emitRow();
+      const t = prev; prev = cur; cur = t;
+      off += rowLen;
+      if (pending.length) { while (pending.length) yield pending.shift(); }
+    }
+    if (off < buf.length) carry = buf.slice(off);
+  }
+  if (y < hdr.h) throw new Error(`資料不完整，只解到第 ${y} 列（共 ${hdr.h} 列）`);
+  while (pending.length) yield pending.shift();
+}
+</script>
+</body>
+</html>
