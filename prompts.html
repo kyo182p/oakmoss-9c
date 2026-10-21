@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Copilot 信件整理指令</title>
+<style>
+:root{--bg:#f4f6f7;--card:#fff;--ink:#1f2937;--mute:#6b7280;--line:#d6dde1;--navy:#123B54;--navy-soft:#e3edf2;--buoy:#B24E19;--buoy-soft:#f7e7dc;--ok:#2C6549;--ok-soft:#dfede6}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0d1417;--card:#141d21;--ink:#dce6e9;--mute:#8fa2aa;--line:#26353b;--navy:#68AECB;--navy-soft:#122a35;--buoy:#E58A52;--buoy-soft:#2b1911;--ok:#5FBE96;--ok-soft:#0f2820}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14.5px/1.6 "Noto Sans TC","Microsoft JhengHei","PingFang TC",system-ui,sans-serif}
+.wrap{max-width:1180px;margin:0 auto;padding:22px 16px 40px}
+h1{margin:0;font-size:22px}
+.sub{color:var(--mute);font-size:13.5px;margin:4px 0 16px}
+.grid{display:grid;grid-template-columns:300px 1fr;gap:16px;align-items:start}
+@media (max-width:860px){.grid{grid-template-columns:1fr}}
+.list{background:var(--card);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.list button{display:block;width:100%;text-align:left;background:none;border:none;border-bottom:1px solid var(--line);padding:10px 14px;cursor:pointer;color:var(--ink);font:inherit}
+.list button:last-child{border-bottom:none}
+.list button .t{font-weight:700}
+.list button .d{font-size:12.5px;color:var(--mute)}
+.list button.on{background:var(--navy-soft);box-shadow:inset 4px 0 0 var(--navy)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:16px 18px;margin-bottom:14px}
+.card h2{margin:0 0 4px;font-size:17px}
+.fields{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px;margin:12px 0}
+label{display:flex;flex-direction:column;gap:3px;font-size:12.5px;color:var(--mute)}
+input,select,textarea{font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:5px;padding:7px 9px}
+textarea{width:100%;min-height:210px;resize:vertical;line-height:1.6}
+.opts{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;margin:6px 0 10px}
+.opts label{flex-direction:row;align-items:center;gap:5px;color:var(--ink);font-size:13px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.btn{background:var(--navy);color:#fff;border:none;border-radius:5px;padding:9px 18px;font:inherit;font-weight:600;cursor:pointer}
+.btn.ghost{background:none;border:1px solid var(--line);color:var(--ink);font-weight:400}
+.hint{font-size:12.5px;color:var(--mute)}
+.ok{color:var(--ok);font-size:13px}
+.tip{background:var(--buoy-soft);border-left:4px solid var(--buoy);border-radius:5px;padding:10px 14px;font-size:13.5px}
+.tip ol{margin:4px 0 0;padding-left:20px}
+code{background:var(--navy-soft);padding:0 4px;border-radius:3px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Copilot 信件整理指令</h1>
+  <div class="sub">左邊選模板 → 填空格（可留白）→ 下方文字可以再自己改 → 按「複製」→ 貼到 Outlook 的 Copilot 送出。</div>
+  <div class="grid">
+    <div class="list" id="list"></div>
+    <div>
+      <div class="card">
+        <h2 id="tTitle"></h2>
+        <div class="hint" id="tDesc"></div>
+        <div class="fields" id="fields"></div>
+        <div class="opts">
+          <label><input type="checkbox" id="oBi"> 中英對照</label>
+          <label><input type="checkbox" id="oTable"> 用表格呈現</label>
+          <label><input type="checkbox" id="oSrc" checked> 附出處信件</label>
+          <label><input type="checkbox" id="oVocab"> 列出重要英文單字</label>
+        </div>
+        <textarea id="out" spellcheck="false"></textarea>
+        <div class="row" style="margin-top:10px">
+          <button class="btn" id="copy">複製</button>
+          <button class="btn ghost" id="reset">還原成模板</button>
+          <span id="msg" class="ok"></span>
+        </div>
+      </div>
+      <div class="tip">
+        <b>讓常用的指令變成 Copilot 的「常用提示」</b>
+        <ol>
+          <li>把指令貼進 Copilot 送出一次。</li>
+          <li>滑鼠移到自己剛送出的那段文字上，看有沒有「儲存提示 / Save prompt」（書籤圖示），按下去命名，例如「Tina｜議題追蹤」。</li>
+          <li>之後在 Copilot 輸入框下方的「檢視提示 / View prompts」（提示資源庫）裡就找得到，點一下帶出來，改日期或主旨再送出。</li>
+        </ol>
+        <div class="hint" style="margin-top:6px">找不到「儲存提示」的話，就把這個網頁加到書籤，每次從這裡複製。定時自動執行（Scheduled prompts）需要付費的 Microsoft 365 Copilot 授權，目前用不到。</div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+const T = [
+  { id: 'subject', title: '指定主旨摘要', desc: '摘要某一串信（以最新一封為準）。',
+    fields: [['subject', '主旨（打幾個關鍵字就好）', 'HHO Week 41_YUN_Flight request'], ['focus', '想特別看什麼（選填）', '每天的 Main / Back up 安排']],
+    body: f => `請摘要主旨包含「${f.subject || '〔主旨〕'}」的信件串，以最新一封為準。\n請列出：\n1. 重點（3–6 點）\n2. 需要我做的事，以及期限\n3. 還沒有結論、需要追問的事` + (f.focus ? `\n請特別整理：${f.focus}` : '') },
+  { id: 'range', title: '指定日期區間整理', desc: '把一段時間收到的信整理成清單。',
+    fields: [['from', '從', '', 'date'], ['to', '到', '', 'date'], ['scope', '範圍（選填：寄件人、資料夾或關鍵字）', '']],
+    body: f => `請整理我在 ${f.from || '〔開始日〕'} 到 ${f.to || '〔結束日〕'} 收到的信件${f.scope ? `（只看：${f.scope}）` : ''}。\n請依日期分組，每封信用一句話說明重點。\n最後另外列出：需要我回覆或處理的事項，以及各自的期限。` },
+  { id: 'topic', title: '重點議題追蹤', desc: '把散在不同信裡的同一件事串起來。',
+    fields: [['topic', '議題關鍵字', 'Muehlhan'], ['from', '從哪天開始（選填）', '', 'date']],
+    body: f => `請找出${f.from ? ` ${f.from} 以來` : ''}所有提到「${f.topic || '〔議題〕'}」的信件，依時間順序整理這件事的演變：\n- 每個時間點：誰說了什麼、做了什麼決定\n- 目前狀態\n- 下一步，以及還在等誰回覆` },
+  { id: 'deadline', title: '期限與待辦清單', desc: '找出有日期、有截止的事。',
+    fields: [['from', '從', '', 'date'], ['to', '到', '', 'date']],
+    body: f => `請從 ${f.from || '〔開始日〕'} 到 ${f.to || '〔結束日〕'} 的信件中，找出所有有期限或日期的事項（交件、報到、出發、到期、會議、開工）。\n每一項寫出：日期、事項、負責人。\n日期已經過了、但信件裡沒看到完成的，請特別標註。` },
+  { id: 'sender', title: '某人寄來的信', desc: '整理某位同事或廠商的來信。',
+    fields: [['who', '寄件人', 'Chang, Ssu Pang'], ['from', '從（選填）', '', 'date'], ['to', '到（選填）', '', 'date']],
+    body: f => `請摘要 ${f.who || '〔寄件人〕'}${f.from || f.to ? ` 在 ${f.from || '…'} 到 ${f.to || '今天'} 之間` : ' 最近'}寄給我的信。\n請列出他要求我做的事，以及我是否已經回覆。` },
+  { id: 'flag', title: '已標旗標的信', desc: '整理紅旗信，依急迫程度排序。',
+    fields: [],
+    body: f => `請列出我標了旗標的信件，每封用一句話說明需要我做什麼、期限是什麼，依急迫程度排序。` },
+  { id: 'reply', title: '回信草稿', desc: '依某封信的內容幫忙起草回覆。',
+    fields: [['subject', '回覆哪封信（主旨）', ''], ['points', '我要回覆的要點', '同意改到 10/24 報到，請提供最終名單'], ['tone', '語氣', '正式、簡潔', 'select:正式、簡潔|友善、口語|很正式（給客戶）']],
+    body: f => `請根據主旨「${f.subject || '〔主旨〕'}」的最新一封信，幫我用英文草擬回覆。\n我要表達的要點：${f.points || '〔要點〕'}\n語氣：${f.tone || '正式、簡潔'}。\n草稿下方附上中文翻譯，讓我確認意思。` },
+  { id: 'meeting', title: '會議準備', desc: '開會前把相關信件整理成背景資料。',
+    fields: [['date', '會議日期', '', 'date'], ['who', '跟誰開會', ''], ['topic', '討論什麼', '']],
+    body: f => `我${f.date ? ` ${f.date} ` : ''}要${f.who ? `跟 ${f.who} ` : ''}開會討論「${f.topic || '〔議題〕'}」。\n請找出相關信件，整理：\n1. 背景\n2. 目前進度\n3. 還沒解決的問題\n4. 我應該準備的資料或數字` },
+  { id: 'translate', title: '英文信翻譯與學習', desc: '看懂英文信，順便學單字。',
+    fields: [['subject', '主旨', '']],
+    body: f => `請把主旨「${f.subject || '〔主旨〕'}」的最新一封信翻成繁體中文（保留原文段落對照）。\n並列出 5–8 個值得學的英文單字或片語，附中文意思和信中的原句。` },
+];
+const TAIL = o => [
+  '\n\n請用繁體中文回答，人名、船名、風機編號、公司名保留原文。',
+  o.bi ? '每一點都附上中英對照。' : '',
+  o.table ? '能用表格的地方請用表格。' : '',
+  o.src ? '每一點後面附上出處信件。' : '',
+  o.vocab ? '最後列出內容中重要的英文單字與中文意思。' : '',
+].join('');
+
+const LS = { get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (_) { return d; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) {} } };
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+let cur = T[0], vals = LS.get('cp_vals', {}), edited = false;
+
+$('#list').innerHTML = T.map(t => `<button data-id="${t.id}"><div class="t">${esc(t.title)}</div><div class="d">${esc(t.desc)}</div></button>`).join('');
+$('#list').querySelectorAll('button').forEach(b => b.onclick = () => pick(b.dataset.id));
+['oBi', 'oTable', 'oSrc', 'oVocab'].forEach(id => $('#' + id).onchange = () => { edited = false; build(); });
+
+function pick(id) {
+  cur = T.find(t => t.id === id) || T[0]; edited = false;
+  document.querySelectorAll('#list button').forEach(b => b.classList.toggle('on', b.dataset.id === cur.id));
+  $('#tTitle').textContent = cur.title; $('#tDesc').textContent = cur.desc;
+  $('#fields').innerHTML = cur.fields.map(([k, label, ph, type]) => {
+    const v = (vals[cur.id] || {})[k] || '';
+    if (type && type.startsWith('select:')) return `<label>${esc(label)}<select data-k="${k}">${type.slice(7).split('|').map(o => `<option ${o === v ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select></label>`;
+    return `<label>${esc(label)}<input data-k="${k}" type="${type === 'date' ? 'date' : 'text'}" value="${esc(v)}" placeholder="${esc(ph || '')}"></label>`;
+  }).join('') || '<div class="hint">這個模板不用填，直接複製就好。</div>';
+  $('#fields').querySelectorAll('[data-k]').forEach(i => i.oninput = i.onchange = () => {
+    (vals[cur.id] = vals[cur.id] || {})[i.dataset.k] = i.value; LS.set('cp_vals', vals); edited = false; build();
+  });
+  LS.set('cp_last', cur.id);
+  build();
+}
+function fmtDate(v) { return v ? v.replace(/^(\d{4})-(\d{2})-(\d{2})$/, (m, y, mo, d) => `${y}/${+mo}/${+d}`) : ''; }
+function build() {
+  if (edited) return;
+  const f = {}; cur.fields.forEach(([k, , , type]) => { const v = (vals[cur.id] || {})[k] || ''; f[k] = type === 'date' ? fmtDate(v) : v.trim(); });
+  const o = { bi: $('#oBi').checked, table: $('#oTable').checked, src: $('#oSrc').checked, vocab: $('#oVocab').checked };
+  $('#out').value = cur.body(f) + TAIL(o);
+}
+$('#out').oninput = () => { edited = true; };
+$('#reset').onclick = () => { edited = false; build(); };
+$('#copy').onclick = async () => {
+  const t = $('#out').value;
+  try { await navigator.clipboard.writeText(t); } catch (_) { $('#out').select(); document.execCommand('copy'); }
+  $('#msg').textContent = '已複製，到 Copilot 貼上送出'; setTimeout(() => $('#msg').textContent = '', 2500);
+};
+pick(LS.get('cp_last', 'subject'));
+</script>
+</body>
+</html>
