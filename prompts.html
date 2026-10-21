@@ -49,12 +49,13 @@ code{background:var(--navy-soft);padding:0 4px;border-radius:3px}
         <h2 id="tTitle"></h2>
         <div class="hint" id="tDesc"></div>
         <div class="fields" id="fields"></div>
-        <div class="opts">
+        <div class="opts" id="opts">
           <label><input type="checkbox" id="oBi"> 中英對照</label>
           <label><input type="checkbox" id="oTable"> 用表格呈現</label>
           <label><input type="checkbox" id="oSrc" checked> 附出處信件</label>
           <label><input type="checkbox" id="oVocab"> 列出重要英文單字</label>
         </div>
+        <div class="hint" id="exportTip" style="display:none;margin:6px 0 8px">Copilot 回覆後，按回覆下方的「複製」，到對話整理網站的「上傳分析 → 📧 貼上信件」貼上。格式不要改，網站才讀得懂。</div>
         <textarea id="out" spellcheck="false"></textarea>
         <div class="row" style="margin-top:10px">
           <button class="btn" id="copy">複製</button>
@@ -100,6 +101,12 @@ const T = [
   { id: 'meeting', title: '會議準備', desc: '開會前把相關信件整理成背景資料。',
     fields: [['date', '會議日期', '', 'date'], ['who', '跟誰開會', ''], ['topic', '討論什麼', '']],
     body: f => `我${f.date ? ` ${f.date} ` : ''}要${f.who ? `跟 ${f.who} ` : ''}開會討論「${f.topic || '〔議題〕'}」。\n請找出相關信件，整理：\n1. 背景\n2. 目前進度\n3. 還沒解決的問題\n4. 我應該準備的資料或數字` },
+  { id: 'export', title: '匯出給對話整理', desc: '固定格式，複製結果貼到「對話整理」網站。', fixed: true,
+    fields: [['from', '從', '', 'date'], ['to', '到', '', 'date'], ['scope', '只要哪些信（選填：關鍵字、寄件人）', 'Muehlhan']],
+    body: f => `請整理我在 ${f.from || '〔開始日〕'} 到 ${f.to || '〔結束日〕'} 收到和寄出的信件${f.scope ? `（只要跟「${f.scope}」有關的）` : ''}。\n` +
+      `每一封信都用下面的格式，一封一段，依時間由舊到新。不要合併不同的信、不要用表格、不要加開頭或結尾的說明：\n\n` +
+      `=== 信件 ===\n日期：YYYY-MM-DD\n時間：HH:MM（24 小時制）\n寄件人：\n收件人：\n主旨：（照原文）\n重點：\n- （2–5 點，人名、日期、數字、船名、風機編號、公司名照原文）\n期限：（信裡有日期要完成或要發生的事，寫日期和事項；沒有就寫「無」）\n\n` +
+      `重點用繁體中文寫，英文信也一樣；主旨、人名保留原文。` },
   { id: 'translate', title: '英文信翻譯與學習', desc: '看懂英文信，順便學單字。',
     fields: [['subject', '主旨', '']],
     body: f => `請把主旨「${f.subject || '〔主旨〕'}」的最新一封信翻成繁體中文（保留原文段落對照）。\n並列出 5–8 個值得學的英文單字或片語，附中文意思和信中的原句。` },
@@ -125,6 +132,8 @@ function pick(id) {
   cur = T.find(t => t.id === id) || T[0]; edited = false;
   document.querySelectorAll('#list button').forEach(b => b.classList.toggle('on', b.dataset.id === cur.id));
   $('#tTitle').textContent = cur.title; $('#tDesc').textContent = cur.desc;
+  $('#opts').style.display = cur.fixed ? 'none' : '';
+  $('#exportTip').style.display = cur.fixed ? '' : 'none';
   $('#fields').innerHTML = cur.fields.map(([k, label, ph, type]) => {
     const v = (vals[cur.id] || {})[k] || '';
     if (type && type.startsWith('select:')) return `<label>${esc(label)}<select data-k="${k}">${type.slice(7).split('|').map(o => `<option ${o === v ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select></label>`;
@@ -141,7 +150,7 @@ function build() {
   if (edited) return;
   const f = {}; cur.fields.forEach(([k, , , type]) => { const v = (vals[cur.id] || {})[k] || ''; f[k] = type === 'date' ? fmtDate(v) : v.trim(); });
   const o = { bi: $('#oBi').checked, table: $('#oTable').checked, src: $('#oSrc').checked, vocab: $('#oVocab').checked };
-  $('#out').value = cur.body(f) + TAIL(o);
+  $('#out').value = cur.body(f) + (cur.fixed ? '' : TAIL(o));
 }
 $('#out').oninput = () => { edited = true; };
 $('#reset').onclick = () => { edited = false; build(); };
