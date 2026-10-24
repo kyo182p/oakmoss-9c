@@ -98,6 +98,11 @@ input:focus-visible,textarea:focus-visible,button:focus-visible{
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));
   gap:1px;background:var(--rule);border:1px solid var(--rule);margin-bottom:16px}
 .stat{background:var(--surface);padding:11px 14px}
+.diffbox{background:var(--surface);border:1px solid var(--rule);border-left:4px solid var(--buoy);border-radius:6px;padding:9px 14px;margin:-4px 0 12px;font-size:13.5px;line-height:1.7}
+.diffbox .dh{font-weight:700;margin-bottom:2px}
+.diffbox b.plus{color:var(--buoy);margin-right:4px}.diffbox b.minus{color:var(--ok);margin-right:4px}
+.diffbox .why{color:var(--ink-3);font-size:12px}
+.diffbox .dup{color:var(--ink-3)}
 .stat .v{font-size:23px;font-weight:700;line-height:1.1}
 .stat .l{font-size:11.5px;color:var(--ink-3);margin-top:3px}
 .stat.bad .v{color:var(--stop)} .stat.good .v{color:var(--ok)} .stat.hi .v{color:var(--buoy)}
@@ -386,6 +391,7 @@ textarea.big{width:100%;min-height:110px;line-height:1.6}
 
     <div id="tab-overview">
       <div class="stats" id="stats"></div>
+      <div id="diffbox" class="diffbox hide"></div>
       <div class="act" style="margin-bottom:10px">
         <span style="font-size:13px;color:var(--ink-3)">名單(1. 2. 3. 用檔案裡的本名+英文名)</span>
         <button class="btn ghost sm" data-list="scheduled" data-box="#listbox1">班表已排的人</button>
@@ -543,7 +549,7 @@ const R = {
   //   全大寫 → 註記(SPIE、BGB、MWS、GWS、IPS、NW、CNS…),不必逐一列舉
   //   一般大小寫 → 通稱(Ricky、Rocky、Ray、Evan…)
   // TAGS 只用來補抓大小寫混寫的例外。
-  TAGS: new Set(["NEXTWAVE","DAY","NIGHT"]),
+  TAGS: new Set(["NEXTWAVE","DAY","NIGHT","SWIRE","MUEHLHAN"]),
   COMPANY_SUFFIX: ["GWS","IPS","Maxlines","TOWSC","Swire"],
   FORCED: { "wei hsiang harrison shen":"Harrison Shen", "harrison shen":"Harrison Shen" },
   MANUAL: { "nikita":"Nikita Rodrigue Barrarmna-boukpessi", "hiba guo":"Kuo, GuanHong (Hiba)" },
@@ -924,6 +930,7 @@ function rosterKeys(name) {
   keys.delete("");
   return keys;
 }
+const ALL_LEVELS = new Set([...R.OFFSHORE, ...R.SHORE, ...R.LEVEL_RANK, ...R.SUPPORT, "FIT", "TT", "OT"].map(x => x.toUpperCase()));
 function parseToken(tok) {
   let t = tok.trim().replace(/^[,;]+|[,;]+$/g,"");
   let prefix = "";
@@ -1169,9 +1176,15 @@ class Plan {
     for (const s of cell.struck)
       for (const t of s.split(/[,;+]/)) if (t.trim()) struckKeys.add(clean(parseToken(t).display));
     const out = [];
+    out.notes = [];
     for (const tok of (cell.raw || "").split(/[,;+]/)) {
       const t = tok.trim();
-      if (!t || t.length > 42 || !/[A-Za-z]/.test(t)) continue;
+      if (!t || !/[A-Za-z]/.test(t)) continue;
+      /* [U] 2026-10-24 Tina:PE 1 寫「Oliver.Tomlinson-TS, MT」,MT 被當成一個人(名字待對應);
+         PH 3 寫「沒有FIT隊長 (馬克自己上?)」也被當成人。兩個都讓差額多算。
+         括號外有中文 = 備註;整格只有等級代碼 = 備註,都不是人 */
+      if (t.length > 42 || /[\u4e00-\u9fff]/.test(t.replace(/\([^)]*\)/g, "")) ||
+          ALL_LEVELS.has(t.replace(/[^A-Za-z]/g, "").toUpperCase())) { out.notes.push(t); continue; }
       const info = parseToken(t);
       if (!info.display) continue;
       out.push({ ...info, struck: struckKeys.has(info.key), row:r, person:null });
@@ -1201,7 +1214,12 @@ class Plan {
       if (!cur) continue;
       cur.rows.push(r);
       if (note) cur.comment = (cur.comment + " " + note).trim();
-      if (dd) { cur.dRows.push(r); cur.members.push(...Plan.members(sh,r)); }
+      if (dd) {
+        cur.dRows.push(r);
+        const ms = Plan.members(sh,r);
+        cur.members.push(...ms);
+        if (ms.notes.length) cur.comment = (cur.comment + " 備註:" + ms.notes.join("、")).trim();
+      }
       // 工單:E=ATS Case ID、F=Error Code、G=Turbine、H=Fault description、J=PTW、L=Service Order
       const turbine = sh.val(r,7), fault = sh.val(r,8);
       if (turbine || fault)
@@ -1522,17 +1540,29 @@ function evaluate(teams, roster, day, S) {
       msg:`這一天總表全員留在岸上(${z.on} 人)、沒有人標 OF,判定為天氣取消`,
       fix:"班表本來就會先排人,取消時只畫刪除線或註記 WOW,所以不做人數比對", where:"" });
 
-  const total = teams.filter(t => !t.painter).reduce((s,t) => s + crew(t).length, 0);
-  const should = roster.people.filter(p => {
+  /* [U] 2026-10-24 Tina:差額 +3 但看不出是誰。原因是同一人排兩隊算兩次、備註被當成人。
+     班表已排改成「不重複的人」;差額拆成三種人列出來 */
+  const unknownNames = [...new Set(teams.filter(t => !t.painter).flatMap(t =>
+    crew(t).filter(m => !m.person).map(m => m.display)))];
+  const total = scheduled.size + unknownNames.length;
+  const shouldPeople = roster.people.filter(p => {
     const a = avail.get(p.name);
     if (a.cat === "support") return scheduled.has(p.name);   // 岸上職務:排到了才算基準
     return a.ok && (a.cat === "available" || a.cat === "offshore");
-  }).length;
+  });
+  const should = shouldPeople.length;
+  const shouldSet = new Set(shouldPeople.map(p => p.name));
+  const diffWho = {
+    extra: [...scheduled.keys()].filter(n => !shouldSet.has(n)).map(n => ({ name:n, why:(avail.get(n)||{}).why || "", teams:scheduled.get(n) })),
+    unknown: unknownNames.map(n => ({ name:n, teams: teams.filter(t => crew(t).some(m => !m.person && m.display === n)).map(t => t.name) })),
+    missing: shouldPeople.filter(p => !scheduled.has(p.name)).map(p => ({ name:p.name, level:p.level })),
+    dup: [...scheduled.entries()].filter(([,ts]) => ts.length > 1).map(([n,ts]) => ({ name:n, teams:ts })),
+  };
 
   return {
     date: day, zone: z.zone, avail, scheduled, badTeams,
     summary: { teams: teams.filter(t => seatsOf(t)).length, scheduled: total, should,
-               diff: total - should, of:z.of, on:z.on,
+               diff: total - should, diffWho, of:z.of, on:z.on,
                stop: issues.filter(i=>i.level==="stop").length,
                warn: issues.filter(i=>i.level==="warn").length },
     issues,
@@ -2231,6 +2261,30 @@ function renderStats(r) {
    [s.stop,"要處理", s.stop?"bad":"good"],[s.warn,"提醒",""],
    [zh[r.zone]||r.zone,"總表狀態",""]].forEach(([v,l,c]) =>
     $("#stats").append(el("div","stat "+(c||""), `<div class="v">${esc(v)}</div><div class="l">${l}</div>`)));
+  renderDiff(r);
+}
+/* 差額是誰:班表多出來的(總表當天不是可出海、或總表找不到的名字)、總表可出海卻沒排到的,外加重複排的 */
+function renderDiff(r) {
+  const s = r.summary, w = s.diffWho || { extra:[], unknown:[], missing:[], dup:[] }, box = $("#diffbox");
+  if (r.zone === "weather_off") {      // 天氣取消日本來就不比人數(見檢核說明)
+    box.classList.remove("hide");
+    box.innerHTML = `<div class="dh">這一天總表全員留岸上,判定為天氣取消,不做人數比對</div>`;
+    return;
+  }
+  const nm = x => esc(listName(x));
+  const cap = (arr, f) => arr.slice(0, 15).map(f).join("、") + (arr.length > 15 ? `…等 ${arr.length} 位` : "");
+  const rows = [];
+  if (w.extra.length) rows.push(`<div><b class="plus">+${w.extra.length}</b> 班表有排、但總表當天不是可出海:` +
+    cap(w.extra, x => `${nm(x.name)}<span class="why">(${esc(x.why)}・${esc(x.teams.join("、"))})</span>`) + `</div>`);
+  if (w.unknown.length) rows.push(`<div><b class="plus">+${w.unknown.length}</b> 班表上的名字在總表找不到:` +
+    cap(w.unknown, x => `${esc(x.name)}<span class="why">(${esc(x.teams.join("、"))})</span>`) + `</div>`);
+  if (w.missing.length) rows.push(`<div><b class="minus">−${w.missing.length}</b> 總表可出海、但班表沒排到:` +
+    cap(w.missing, x => `${nm(x.name)}<span class="why">(${esc(x.level)})</span>`) + `</div>`);
+  if (w.dup.length) rows.push(`<div class="dup">重複排(只算一次,不影響差額):` +
+    w.dup.map(x => `${nm(x.name)}<span class="why">(${esc(x.teams.join("、"))})</span>`).join("、") + `</div>`);
+  box.classList.toggle("hide", !rows.length);
+  const head = s.diff === 0 ? "差額 0,人數對得上" : `差額 ${s.diff > 0 ? "+" : ""}${s.diff} 是這些人`;
+  box.innerHTML = rows.length ? `<div class="dh">${head}</div>` + rows.join("") : "";
 }
 
 function renderIssues(host, issues) {
