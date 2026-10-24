@@ -336,6 +336,38 @@ textarea.big{width:100%;min-height:110px;line-height:1.6}
 .mp-dot.on{stroke:#E53935;stroke-width:3}
 .mp-lbl{font-size:8.5px;fill:#1a1a1a;font-weight:700;text-anchor:middle;pointer-events:none}
 .mp-lbl.on{fill:#E53935;font-size:11px}
+
+/* ---------- 問 AI(側邊對話) ---------- */
+#askFab{position:fixed;right:18px;bottom:72px;z-index:80;background:var(--buoy);color:#fff;
+  border:none;border-radius:24px;padding:10px 16px;font-size:14px;font-weight:700;
+  box-shadow:0 6px 18px rgba(0,0,0,.28);display:flex;gap:7px;align-items:center;cursor:pointer}
+#askFab:hover{filter:brightness(1.1)}
+#askWin{position:fixed;right:0;top:0;bottom:0;z-index:90;width:460px;max-width:100vw;background:var(--surface);
+  border-left:1px solid var(--rule);box-shadow:-10px 0 30px rgba(0,0,0,.25);display:flex;flex-direction:column}
+#askWin .ah{display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--rule);background:var(--sunk)}
+#askWin .ah b{font-size:15px}
+#askWin .ah .sub{font-size:12px;color:var(--ink-3);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#askWin .ah button{border:1px solid var(--rule);background:var(--surface);color:var(--ink-2);border-radius:3px;font-size:12px;padding:2px 8px;cursor:pointer}
+#askLog{flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:10px;font-size:13.5px;line-height:1.65}
+#askLog .q{align-self:flex-end;max-width:88%;background:var(--navy);color:#fff;border-radius:10px 10px 2px 10px;padding:7px 11px;white-space:pre-wrap;word-break:break-word}
+#askLog .q .fl{font-size:11.5px;opacity:.85;margin-top:3px}
+#askLog .a{align-self:flex-start;max-width:96%;background:var(--sunk);border-radius:10px 10px 10px 2px;padding:8px 12px;white-space:pre-wrap;word-break:break-word}
+#askLog .a .cp{display:block;margin-top:6px;border:1px solid var(--rule);background:var(--surface);color:var(--ink-2);border-radius:3px;font-size:11.5px;padding:1px 8px;cursor:pointer}
+#askLog .step{font-size:12px;color:var(--ink-3)}
+#askLog .er{color:var(--stop);font-size:13px}
+#askLog .tip{color:var(--ink-3);font-size:12.5px}
+#askLog .tip li{margin:2px 0;cursor:pointer;color:var(--navy)}
+#askFiles{display:flex;gap:6px;flex-wrap:wrap;padding:0 12px}
+#askFiles span{font-size:12px;background:var(--navy-soft);color:var(--navy);border-radius:12px;padding:1px 9px}
+#askFiles b{cursor:pointer;margin-left:5px;font-weight:400}
+#askWin .af{display:flex;gap:6px;align-items:flex-end;padding:8px 12px 4px}
+#askWin .af textarea{flex:1;resize:vertical;min-height:44px;max-height:200px;font-size:13.5px;padding:6px 8px;border:1px solid var(--rule);border-radius:4px;background:var(--surface);color:var(--ink)}
+#askWin .af button{border:1px solid var(--rule);background:var(--surface);border-radius:4px;padding:7px 10px;cursor:pointer}
+#askWin .af #askSend{background:var(--navy);color:#fff;border-color:var(--navy);font-weight:700}
+#askWin .af button:disabled{opacity:.45;cursor:default}
+#askWin .anote{font-size:11px;color:var(--ink-3);padding:0 12px 8px}
+#askWin.over{outline:3px dashed var(--buoy);outline-offset:-6px}
+@media (max-width:700px){#askWin{width:100vw}}
 </style>
 </head>
 <body>
@@ -344,7 +376,7 @@ textarea.big{width:100%;min-height:110px;line-height:1.6}
 <div id="start" class="start">
   <h1>雲林排班工具</h1>
   <p>把 <b>人力總表</b> 和 <b>每日出海計畫</b> 兩個 Excel 拖進來就可以開始。
-     檔案只在這台電腦的瀏覽器裡處理,<b>不會上傳到任何地方,也不會改到你的 Excel</b>。</p>
+     檔案只在這台電腦的瀏覽器裡處理,<b>不會改到你的 Excel</b>;只有在右下角「問 AI」按送出時,問題和 AI 查到的那幾筆班表資料才會送出去。</p>
   <div class="drop" id="drop">
     <div class="big">把兩個 Excel 拖到這裡</div>
     <div class="sm">或按下面的按鈕挑檔案(可以一次選兩個)</div>
@@ -468,6 +500,22 @@ textarea.big{width:100%;min-height:110px;line-height:1.6}
       <div class="hint">按號碼定位;可以連點多個。點地圖上的風機也會反過來標出表格。<br>視窗右下角可以拉大縮小,標題列可以拖。</div>
     </div>
   </div>
+</div>
+
+<!-- ================= 問 AI ================= -->
+<button id="askFab" title="用 AI 問排班的問題">💬 問 AI</button>
+<div id="askWin" class="hide">
+  <div class="ah"><b>問 AI</b><span class="sub" id="askSub">會自己查已載入的總表與出海計畫</span>
+    <button id="askNew" title="清掉這段對話,重新開始">新對話</button><button id="askClose">收合 ×</button></div>
+  <div id="askLog"></div>
+  <div id="askFiles"></div>
+  <div class="af">
+    <button id="askAttach" title="附加檔案:圖片、PDF、Excel、CSV、文字">📎</button>
+    <textarea id="askIn" rows="2" placeholder="例如:10/28 夜班還缺誰?誰可以補?(Enter 送出,Shift+Enter 換行)"></textarea>
+    <button id="askSend">送出</button>
+  </div>
+  <input type="file" id="askFile" multiple accept="image/*,.pdf,.xlsx,.xlsm,.csv,.txt" class="hide">
+  <div class="anote">按「送出」時,問題、附件和 AI 查到的那幾筆班表資料會送到 Claude 處理;平常的檢核、草稿都只在這台電腦。</div>
 </div>
 
 <script>
@@ -3576,6 +3624,291 @@ const TMAP = (() => {
   $("#mapSize").onclick = e => { const small = win.classList.toggle("small");
     win.style.width = ""; win.style.height = ""; e.target.textContent = small ? "放大" : "縮小"; };
   $("#mapFab").classList.remove("hide");       // 開場畫面就看得到入口
+})();
+
+/* ================================================================ 問 AI
+   [U] 2026-10-24:Tina 要能隨時問排班問題、可以傳檔案。
+   API Key 不放在網頁:走「對話整理」的 Apps Script 後端(同一組登入代碼)。
+   AI 需要資料時回 tool_use,這裡在本機查總表 / 出海計畫、算好再回給它 ——
+   人數一律由程式算,AI 只負責判斷與說明。 */
+const ASK = (() => {
+  const API = "https://script.google.com/macros/s/AKfycbypBj9WmBy53a_RvoWrKCeCL_o7KTo3SuJ-YwYeZzIv_h1e669AC38Bv1AmCzIcxIeQdQ/exec";
+  const MAX_ROUNDS = 8;
+  const lsGet = k => { try { return localStorage.getItem(k) || ""; } catch (_) { return ""; } };
+  const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (_) {} };
+  let msgs = [], files = [], busy = false;
+  /* 「對話整理」跟這裡在同一個網域(kyo182p.github.io),在那邊登入過就直接沿用 */
+  const getCode = () => { const a = lsGet("ask_code"); if (a) return a; try { return JSON.parse(lsGet("cd_code") || '""'); } catch (_) { return ""; } };
+  const log = () => $("#askLog");
+  const isoOk = d => /^\d{4}-\d{2}-\d{2}$/.test(d || "");
+  const wdz = d => "日一二三四五六"[new Date(d + "T00:00:00Z").getUTCDay()];
+
+  async function call(data) {
+    const code = getCode();
+    if (!code) throw { code: "need_code" };
+    let res;
+    try {
+      res = await fetch(API, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ action: "ask", code, ...data }), redirect: "follow" });
+    } catch (e) { throw { code: "network" }; }
+    let j; try { j = await res.json(); } catch (e) { throw { code: "server_error" }; }
+    if (!j.ok) throw { code: j.code || "server_error", message: j.message || "" };
+    return j;
+  }
+  const ERRS = { need_code: "還沒輸入代碼。", bad_code: "代碼不對或已停用(跟「對話整理」用同一組代碼)。",
+    network: "連不到後端。如果是在 claude.ai 上開的版本,請改用 GitHub 上的排班網站。", timeout: "AI 回應超過 60 秒,請把問題拆小一點再問。",
+    rate_limited: "AI 服務忙碌,稍後再試。", no_credit: "API 額度不足。", too_big: "對話太長或附件太大,請按「新對話」。",
+    bad_action: "後端還沒更新到有「問 AI」的版本(要部署新版 Code.gs)。", not_setup: "後端還沒執行 setup()。" };
+  const errText = e => (ERRS[e && e.code] || "發生錯誤") + (e && e.message ? `(${e.message})` : "");
+
+  /* ---------- 給 AI 的工具(全部在本機算) ---------- */
+  const needData = () => { if (!ROSTER || !PLAN) throw new Error("還沒載入總表與出海計畫,請先把兩個 Excel 拖進來"); };
+  const pname = m => m.person ? m.person.name : m.display;
+  function teamsOf(d) {
+    if (DRAFTS.has(d) && !PLAN.days.has(d)) return { teams: teamsFromDraft(DRAFTS.get(d), ROSTER), src: "畫面上的草稿(還沒寫回檔案)" };
+    return { teams: teamsFromPlan(PLAN, ROSTER, d), src: PLAN.days.has(d) ? "出海計畫檔案" : "出海計畫沒有這一天" };
+  }
+  function brief(t) {
+    return { team: t.name, vessel: t.vessel, work: t.worktype || undefined, night: t.night || undefined, painter: t.painter || undefined,
+      members: t.members.map(m => ({ name: pname(m), level: memberLevel(m) || undefined, prefix: m.prefix || undefined,
+        cancelled: m.struck || undefined, not_in_roster: (!m.person && !m.outsider) || undefined, external: m.outsider || undefined })),
+      note: t.comment || undefined, turbines: (t.turbines || []).map(g => g.id) };
+  }
+  function findPerson(q) {
+    const s = String(q || "").trim().toLowerCase(); if (!s) return [];
+    let hit = ROSTER.everyone.filter(p => p.name.toLowerCase().includes(s));
+    if (!hit.length) { const p = ROSTER.find(clean(s)); if (p) hit = [p]; }
+    if (!hit.length) hit = ROSTER.everyone.filter(p => s.split(/[\s,]+/).filter(Boolean).every(w => p.name.toLowerCase().includes(w)));
+    return hit;
+  }
+  const WORKCAT = ["available", "offshore", "onshore", "support", "shore"];
+  const TOOLS = {
+    day_overview({ date }) {
+      needData(); if (!isoOk(date)) throw new Error("日期格式要 YYYY-MM-DD");
+      const { teams, src } = teamsOf(date);
+      const ev = evaluate(teams, ROSTER, date, S), s = ev.summary, w = s.diffWho;
+      const day = PLAN.days.get(date);
+      const blocks = {};
+      if (day) for (const [k, ms] of Object.entries(day.blocks || {})) blocks[k] = ms.map(m => m.display + (m.struck ? "(取消)" : ""));
+      return { date, weekday: "星期" + wdz(date), source: src, zone: ev.zone,
+        summary: { teams: s.teams, scheduled: s.scheduled, should_offshore: s.should, diff: s.diff },
+        diff_detail: { scheduled_but_not_available: w.extra.map(x => `${x.name}(${x.why};${x.teams.join("、")})`),
+          names_not_in_roster: w.unknown.map(x => `${x.name}(${x.teams.join("、")})`),
+          available_but_not_scheduled: w.missing.map(x => `${x.name}(${x.level})`),
+          scheduled_twice: w.dup.map(x => `${x.name}(${x.teams.join("、")})`) },
+        issues: ev.issues.map(i => ({ level: { stop: "要處理", warn: "提醒", info: "說明" }[i.level] || i.level, msg: i.msg, fix: i.fix || undefined })),
+        teams: teams.map(brief), other_blocks: blocks,
+        draft_on_screen: DRAFTS.has(date) && PLAN.days.has(date) ? teamsFromDraft(DRAFTS.get(date), ROSTER).map(brief) : undefined };
+    },
+    person_schedule({ name, from, to }) {
+      needData(); if (!isoOk(from) || !isoOk(to) || from > to) throw new Error("日期區間錯誤");
+      const hit = findPerson(name);
+      if (!hit.length) return { found: 0, note: `總表找不到「${name}」` };
+      if (hit.length > 1) return { found: hit.length, candidates: hit.slice(0, 15).map(p => `${p.name}(${p.level},${p.group})`), note: "有好幾位,請指定是哪一位" };
+      const p = hit[0], days = [];
+      let streak = 0, best = 0;
+      for (let d = from, i = 0; d <= to && i < 62; d = addDays(d, 1), i++) {
+        const a = ROSTER.avail(p, d), code = ROSTER.code(p, d) || "";
+        const where = [];
+        if (PLAN.days.has(d) || DRAFTS.has(d)) {
+          for (const t of teamsOf(d).teams) for (const m of t.members)
+            if (m.person === p || (!m.person && m.display && ROSTER.find(clean(m.display)) === p))
+              where.push(t.name + (t.night ? "(夜班)" : "") + (m.struck ? "(取消)" : ""));
+          const dd = PLAN.days.get(d);
+          if (dd) for (const [k, ms] of Object.entries(dd.blocks || {}))
+            if (ms.some(m => ROSTER.find(m.key) === p)) where.push(k);
+        }
+        const work = WORKCAT.includes(a.cat) && code !== "";
+        streak = work ? streak + 1 : 0; best = Math.max(best, streak);
+        days.push(`${d}(${wdz(d)}) 代碼 ${code || "空白"}${a.why ? "・" + a.why : ""}${where.length ? "・排在 " + where.join("、") : ""}`);
+      }
+      return { name: p.name, level: p.level, group: p.group, hidden: p.hidden || undefined,
+        days, longest_working_streak: best, working_streak_at_end: streak,
+        note: "連續上班 = 總表有填代碼且不是請假/訓練/交通/不在雲林的連續天數" };
+    },
+    available_people({ date, levels, only_unscheduled }) {
+      needData(); if (!isoOk(date)) throw new Error("日期格式要 YYYY-MM-DD");
+      const { teams } = teamsOf(date);
+      const ev = evaluate(teams, ROSTER, date, S);
+      const lv = (levels || []).map(x => String(x).toUpperCase());
+      const night = new Set(); teams.filter(t => t.night).forEach(t => t.members.forEach(m => m.person && night.add(m.person.name)));
+      const list = ROSTER.people.filter(p => { const a = ev.avail.get(p.name); return a && a.ok; })
+        .filter(p => !lv.length || lv.includes(p.level.toUpperCase()))
+        .filter(p => !only_unscheduled || !ev.scheduled.has(p.name))
+        .map(p => ({ name: p.name, level: p.level, group: p.group, code: ROSTER.code(p, date),
+          scheduled_in: ev.scheduled.has(p.name) ? ev.scheduled.get(p.name).join("、") + (night.has(p.name) ? "(夜班)" : "") : undefined }));
+      return { date, count: list.length, people: list };
+    },
+    find_people({ query }) {
+      needData();
+      const q = String(query || "").trim().toLowerCase();
+      const list = ROSTER.everyone.filter(p => p.name.toLowerCase().includes(q) || p.level.toLowerCase() === q || (p.group || "").toLowerCase().includes(q));
+      return { count: list.length, people: list.slice(0, 60).map(p => `${p.name}(${p.level},${p.group}${p.hidden ? ",隱藏" : ""})`) };
+    },
+    date_range_counts({ from, to }) {
+      needData(); if (!isoOk(from) || !isoOk(to) || from > to) throw new Error("日期區間錯誤");
+      const out = [];
+      for (let d = from, i = 0; d <= to && i < 31; d = addDays(d, 1), i++) {
+        if (!PLAN.days.has(d) && !DRAFTS.has(d)) { out.push(`${d}(${wdz(d)}) 出海計畫沒有這一天`); continue; }
+        const { teams } = teamsOf(d), ev = evaluate(teams, ROSTER, d, S), s = ev.summary;
+        const nightN = new Set(teams.filter(t => t.night).flatMap(t => counted(t).map(pname))).size;
+        out.push(`${d}(${wdz(d)}) ${ev.zone} 班表已排 ${s.scheduled}・總表可出海 ${s.should}・差額 ${s.diff}・夜班 ${nightN}・要處理 ${s.stop}・提醒 ${s.warn}`);
+      }
+      return { days: out };
+    },
+  };
+  const LABEL = {
+    day_overview: i => `查 ${i.date} 的班表與檢核`, person_schedule: i => `查 ${i.name} ${i.from}~${i.to}`,
+    available_people: i => `查 ${i.date} 可派工的人${(i.levels || []).length ? "(" + i.levels.join("/") + ")" : ""}`,
+    find_people: i => `在總表找「${i.query}」`, date_range_counts: i => `看 ${i.from}~${i.to} 每天的人數`,
+  };
+  function context() {
+    const lines = [`今天:${new Date().toISOString().slice(0, 10)}`];
+    if (ROSTER && PLAN) {
+      const rd = [...ROSTER.dateCol.keys()].sort();
+      lines.push($("#n1").textContent.trim(), $("#n2").textContent.trim(),
+        `總表日期:${rd[0]} ~ ${rd[rd.length - 1]};出海計畫日期:${PLAN.dates[0]} ~ ${PLAN.dates[PLAN.dates.length - 1]}`);
+      if (DAY) lines.push(`使用者畫面上正在看:${DAY}(星期${wdz(DAY)})`);
+      if (DRAFTS.size) lines.push(`畫面上有草稿的日子:${[...DRAFTS.keys()].sort().join("、")}`);
+    } else lines.push("還沒載入 Excel,工具查不到班表;可以先回答一般問題或附件內容。");
+    return lines.join("\n");
+  }
+
+  /* ---------- 附件 ---------- */
+  const b64 = buf => { let s = ""; const u = new Uint8Array(buf); for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); };
+  async function imageBlock(f) {
+    const url = URL.createObjectURL(f);
+    try {
+      const img = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = url; });
+      const k = Math.min(1, 1600 / Math.max(img.width, img.height));
+      const c = document.createElement("canvas"); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 0, 0, c.width, c.height);
+      return { type: "image", source: { type: "base64", media_type: "image/jpeg", data: c.toDataURL("image/jpeg", 0.85).split(",")[1] } };
+    } finally { URL.revokeObjectURL(url); }
+  }
+  async function excelBlock(f) {
+    const book = await Book.open(f); await book.prepare();
+    let out = `【附件 Excel:${f.name}】(只轉了文字,沒有顏色;隱藏列已略過)\n`;
+    for (const name of book.sheetNames.slice(0, 8)) {
+      if (out.length > 120000) { out += `\n(後面的分頁太多,沒有轉)`; break; }
+      const sh = await book.sheet(name, 40);
+      out += `\n## 分頁:${name}\n`;
+      for (let r = 1; r <= Math.min(sh.maxRow, 600); r++) {
+        if (sh.hidden.has(r)) continue;
+        const row = []; for (let c = 1; c <= Math.min(sh.maxCol, 40); c++) { let v = sh.val(r, c); const d = /^\d{5}(\.\d+)?$/.test(v) ? serialToDate(v) : null; row.push(d || v); }
+        while (row.length && !row[row.length - 1]) row.pop();
+        if (row.length) out += `${r}\t` + row.join("\t") + "\n";
+        if (out.length > 120000) break;
+      }
+    }
+    return { type: "text", text: out.slice(0, 125000) };
+  }
+  async function toBlock(f) {
+    const n = f.name.toLowerCase();
+    if (/^image\//.test(f.type) || /\.(png|jpe?g|gif|webp|bmp)$/.test(n)) return imageBlock(f);
+    if (f.type === "application/pdf" || n.endsWith(".pdf")) {
+      if (f.size > 4.5e6) throw new Error(`${f.name} 超過 4.5 MB,請分開傳`);
+      return { type: "document", source: { type: "base64", media_type: "application/pdf", data: b64(await f.arrayBuffer()) } };
+    }
+    if (/\.(xlsx|xlsm)$/.test(n)) return excelBlock(f);
+    if (/\.(csv|txt|md)$/.test(n)) return { type: "text", text: `【附件:${f.name}】\n` + (await f.text()).slice(0, 120000) };
+    throw new Error(`${f.name} 這種檔案不支援(Word、PPT 請另存成 PDF)`);
+  }
+  function addFiles(list) {
+    for (const f of list) files.push(f);
+    renderFiles();
+  }
+  function renderFiles() {
+    $("#askFiles").innerHTML = files.map((f, i) => `<span>📎 ${esc(f.name)}<b data-i="${i}" title="拿掉">✕</b></span>`).join("");
+    $("#askFiles").querySelectorAll("b").forEach(b => b.onclick = () => { files.splice(+b.dataset.i, 1); renderFiles(); });
+  }
+
+  /* ---------- 畫面 ---------- */
+  const md = t => esc(t).replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>").replace(/^#{1,4}\s*(.+)$/gm, "<b>$1</b>");
+  function add(cls, html) { const d = el("div", cls, html); log().append(d); log().scrollTop = log().scrollHeight; return d; }
+  function answer(text) {
+    const d = add("a", md(text.trim()));
+    const b = el("button", "cp", "複製"); b.onclick = async () => {
+      try { await navigator.clipboard.writeText(text.trim()); b.textContent = "已複製"; } catch (_) { b.textContent = "請自己選取複製"; }
+      setTimeout(() => b.textContent = "複製", 1500); };
+    d.append(b);
+  }
+  function welcome() {
+    log().innerHTML = "";
+    const d = add("tip", `可以直接問,例如:<ul>
+      <li>10/24 夜班有哪些人?用 1- 2- 3- 列出來</li><li>這一天差額是怎麼來的?</li>
+      <li>10/28 還缺一位 MT,誰可以補?</li><li>Jack Hsu 這個月連續上班有沒有超過 14 天?</li></ul>
+      可以按 📎 或把檔案拖進來:圖片、PDF、Excel、CSV。`);
+    d.querySelectorAll("li").forEach(li => li.onclick = () => { $("#askIn").value = li.textContent; $("#askIn").focus(); });
+    if (!getCode()) codeForm();
+  }
+  function codeForm(msg) {
+    const d = add("tip", `${msg ? `<div class="er">${esc(msg)}</div>` : ""}第一次使用要輸入代碼(跟「對話整理」同一組,例如 AOC-XXXXXXXX):
+      <div style="display:flex;gap:6px;margin-top:6px"><input type="password" style="flex:1;padding:4px 7px"><button class="cp" style="margin:0">儲存</button></div>`);
+    const inp = d.querySelector("input");
+    d.querySelector("button").onclick = () => { const v = inp.value.trim(); if (!v) return; lsSet("ask_code", v); d.innerHTML = "代碼已儲存。"; };
+  }
+
+  async function send() {
+    if (busy) return;
+    const q = $("#askIn").value.trim();
+    if (!q && !files.length) return;
+    if (!getCode()) { codeForm("請先輸入代碼"); return; }
+    busy = true; $("#askSend").disabled = true;
+    const snap = msgs.length, sentFiles = files.slice();
+    add("q", esc(q || "(看附件)") + (sentFiles.length ? `<div class="fl">📎 ${sentFiles.map(f => esc(f.name)).join("、")}</div>` : ""));
+    $("#askIn").value = ""; files = []; renderFiles();
+    const wait = add("step", `<span class="spin"></span> 想一下…`);
+    try {
+      const content = [];
+      for (const f of sentFiles) { wait.innerHTML = `<span class="spin"></span> 讀取 ${esc(f.name)}…`; content.push(await toBlock(f)); }
+      content.push({ type: "text", text: q || "請看附件並說明重點。" });
+      msgs.push({ role: "user", content });
+      let done = false;
+      for (let round = 0; round < MAX_ROUNDS && !done; round++) {
+        wait.innerHTML = `<span class="spin"></span> ${round ? "整理中…" : "想一下…"}`;
+        const r = await call({ messages: msgs, context: context() });
+        msgs.push({ role: "assistant", content: r.content });
+        const text = r.content.filter(b => b.type === "text").map(b => b.text).join("\n").trim();
+        if (r.stop_reason !== "tool_use") { wait.remove(); answer(text || "(沒有回覆內容)"); done = true;
+          if (r.stop_reason === "max_tokens") add("step", "(回答太長被截斷了,可以請它「接著講」)"); break; }
+        if (text) add("step", esc(text));
+        const results = [];
+        for (const b of r.content.filter(b => b.type === "tool_use")) {
+          add("step", "🔎 " + esc((LABEL[b.name] || (() => b.name))(b.input || {})));
+          let out;
+          try { out = (TOOLS[b.name] || (() => { throw new Error("沒有這個工具"); }))(b.input || {}); }
+          catch (e) { out = { error: String((e && e.message) || e) }; }
+          results.push({ type: "tool_result", tool_use_id: b.id, content: JSON.stringify(out).slice(0, 60000) });
+        }
+        msgs.push({ role: "user", content: results });
+      }
+      if (!done) { wait.remove(); msgs.length = snap; add("er", "查了太多次還沒有結論,請把問題拆小一點再問。"); $("#askIn").value = q; }
+    } catch (e) {
+      wait.remove(); msgs.length = snap; files = sentFiles; renderFiles(); $("#askIn").value = q;
+      if (e && e.code === "bad_code") { lsSet("ask_code", ""); try { localStorage.removeItem("cd_code"); } catch (_) {} codeForm(errText(e)); }
+      else add("er", esc(e && e.code ? errText(e) : String((e && e.message) || e)) + "(問題已放回輸入框,可以再按送出)");
+    } finally { busy = false; $("#askSend").disabled = false; }
+  }
+
+  function open() { $("#askWin").classList.remove("hide"); $("#askFab").classList.add("hide"); if (!log().children.length) welcome(); $("#askIn").focus(); }
+  function close() { $("#askWin").classList.add("hide"); $("#askFab").classList.remove("hide"); }
+  $("#askFab").onclick = open;
+  $("#askClose").onclick = close;
+  $("#askNew").onclick = () => { if (busy) return; msgs = []; files = []; renderFiles(); welcome(); };
+  $("#askSend").onclick = send;
+  $("#askIn").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); } });
+  $("#askAttach").onclick = () => $("#askFile").click();
+  $("#askFile").onchange = e => { addFiles(e.target.files); e.target.value = ""; };
+  const win = $("#askWin");
+  win.addEventListener("dragover", e => { e.preventDefault(); win.classList.add("over"); });
+  win.addEventListener("dragleave", e => { if (!win.contains(e.relatedTarget)) win.classList.remove("over"); });
+  win.addEventListener("drop", e => { e.preventDefault(); e.stopPropagation(); win.classList.remove("over"); addFiles(e.dataTransfer.files); });
+  $("#askIn").addEventListener("paste", e => {
+    const it = [...(e.clipboardData && e.clipboardData.items || [])].filter(i => i.type.startsWith("image/"));
+    if (it.length) { e.preventDefault(); addFiles(it.map((i, k) => { const f = i.getAsFile(); return new File([f], `貼上的圖片${k + 1}.png`, { type: f.type }); })); }
+  });
+  return { open, close, TOOLS, _msgs: () => msgs };
 })();
 
 /* ---------- 綁事件 ---------- */
