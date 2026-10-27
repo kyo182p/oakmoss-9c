@@ -1257,6 +1257,8 @@ class Plan {
          PH 3 寫「沒有FIT隊長 (馬克自己上?)」也被當成人。兩個都讓差額多算。
          括號外有中文 = 備註;整格只有等級代碼 = 備註,都不是人 */
       if (t.length > 42 || /[\u4e00-\u9fff]/.test(t.replace(/\([^)]*\)/g, "")) ||
+          /* [U] 2026-10-27:Lugang 3 寫「No offshore work」被當成人名 */
+          (/\s/.test(t) && /\b(no|offshore|work|tbc|tbd|cancel(?:led)?|standby|backup|pending|weather|wow|none)\b/i.test(t)) ||
           ALL_LEVELS.has(t.replace(/[^A-Za-z]/g, "").toUpperCase())) { out.notes.push(t); continue; }
       const info = parseToken(t);
       if (!info.display) continue;
@@ -3830,14 +3832,20 @@ const ASK = (() => {
       const night = new Set(); teams.filter(t => t.night).forEach(t => t.members.forEach(m => m.person && night.add(m.person.name)));
       const sp = shiftSplit(teamsFromPlan(PLAN, ROSTER, date), availPeople(ev)), shiftOf = new Map();
       sp.day.forEach(p => shiftOf.set(p.name, "日班")); sp.night.forEach(p => shiftOf.set(p.name, "夜班")); sp.unsure.forEach(p => shiftOf.set(p.name, "日夜班要確認"));
-      const list = ROSTER.people.filter(p => { const a = ev.avail.get(p.name); return a && a.ok; })
+      /* [U] 2026-10-27:AI 列出 46 人,多了 Graeme Bissett(ST)。ST 原則不出海、沒排到不算「總表可出海」,
+         跟總覽的名單同一個定義;另外列在 shore_support_not_counted */
+      const base = new Set(availPeople(ev).map(p => p.name));
+      const shore = ROSTER.people.filter(p => { const a = ev.avail.get(p.name); return a && a.ok && !base.has(p.name); });
+      const list = ROSTER.people.filter(p => base.has(p.name))
         .filter(p => !lv.length || lv.includes(p.level.toUpperCase()))
         .filter(p => !only_unscheduled || !ev.scheduled.has(p.name))
         .map(p => ({ name: listName(p.name), level: p.level, group: p.group, code: ROSTER.code(p, date), shift: shiftOf.get(p.name),
           night_pool: p.nightGreen || p.nightRegular || undefined,
           scheduled_in: ev.scheduled.has(p.name) ? ev.scheduled.get(p.name).join("、") + (night.has(p.name) ? "(夜班)" : "") : undefined }));
       return { date, count: list.length, shift_method: sp.method, people: list,
-        note: "可出海名單請照總表順序、分日班 / 夜班、用 1- 2- 3- 編號;shift 沒有出海計畫時是推定,要說明" };
+        shore_support_not_counted: shore.map(p => `${listName(p.name)}(${p.level},${(ev.avail.get(p.name) || {}).why})`),
+        note: "people 就是「總表可出海」的人(跟排班工具總覽的人數一致),照總表順序、分日班 / 夜班、用 1- 2- 3- 編號;" +
+              "shore_support_not_counted 是岸上職務(ST)當天有上班但沒排出海,不算進可出海,不要列進名單,需要時另外一句帶過;shift 沒有出海計畫時是推定,要說明" };
     },
     find_people({ query }) {
       needData();
