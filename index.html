@@ -3844,7 +3844,7 @@ const ASK = (() => {
           scheduled_in: ev.scheduled.has(p.name) ? ev.scheduled.get(p.name).join("、") + (night.has(p.name) ? "(夜班)" : "") : undefined }));
       return { date, count: list.length, shift_method: sp.method, people: list,
         shore_support_not_counted: shore.map(p => `${listName(p.name)}(${p.level},${(ev.avail.get(p.name) || {}).why})`),
-        note: "people 就是「總表可出海」的人(跟排班工具總覽的人數一致),照總表順序、分日班 / 夜班、用 1- 2- 3- 編號;" +
+        note: "people 就是「總表可出海」的人(跟排班工具總覽的人數一致),照總表順序、分日班 / 夜班、用 1- 2- 3- 編號,日班、夜班各自從 1- 開始;" +
               "shore_support_not_counted 是岸上職務(ST)當天有上班但沒排出海,不算進可出海,不要列進名單,需要時另外一句帶過;shift 沒有出海計畫時是推定,要說明" };
     },
     find_people({ query }) {
