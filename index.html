@@ -546,6 +546,10 @@ const R = {
      或寫低一階(BT vs CT 238 次、CT vs MT 64 次)。總表幾乎永遠是比較高的那個。
      唯一例外是岸上職務(ST):總表寫 ST、班表寫 TS,這時要以總表的 ST 為準。 */
   LEVEL_RANK: ["TSF","TS","MTF","MT","HV","CT","BT","TSWA","W"],
+  /* [T] 夜班人選 = 總表姓名欄綠色(主題色 6、淡 40%)的分包商 + 這兩位雲林正職(沒有標色) */
+  NIGHT_REGULARS: ["Jacky Hong","Ken Chao"],
+  /* [T] 永不派工(人在台灣以外),總表就算填了 w 也不算可出海、不自動補 */
+  NEVER: ["Gordon Huang"],
   /* [T] HV 隊分兩種,分水嶺是「隊裡有沒有歐洲技師」(總表 Level = HV):
        · 一般 HV 年保 —— TS、MT 帶隊就可以,不需要 F。
        · HV 嚴重問題 —— 要請 Level 掛 HV 的歐洲技師,加上 TSF 或 MTF 隊長,
@@ -821,6 +825,13 @@ class Book {
     const cx = st.match(/<cellXfs[^>]*>([\s\S]*?)<\/cellXfs>/);
     const xfs = cx ? (cx[1].match(/<xf [^>]*?\/>|<xf [^>]*?>[\s\S]*?<\/xf>/g) || []) : [];
     this.xfFont = xfs.map(x => { const m = x.match(/fontId="(\d+)"/); return m ? +m[1] : 0; });
+    /* 姓名欄綠色 = 夜班人選 [V] 10/24 綠色且有代碼的人 = 出海計畫上的夜班(另加 Jacky Hong) */
+    const fl = st.match(/<fills[^>]*>([\s\S]*?)<\/fills>/);
+    const fills = fl ? (fl[1].match(/<fill>[\s\S]*?<\/fill>|<fill\s*\/>/g) || []) : [];
+    this.fillGreen = fills.map(f => {
+      const fg = (f.match(/<fgColor[^>]*>/) || [""])[0], t = fg.match(/tint="([-\d.]+)"/);
+      return /solid/.test(f) && /theme="6"/.test(fg) && !!t && +t[1] > 0.3 && +t[1] < 0.5; });
+    this.xfFill = xfs.map(x => { const m = x.match(/fillId="(\d+)"/); return m ? +m[1] : 0; });
   }
   async sheet(name, maxCol) {
     const data = await readPart(this.zip, this.parts[name]);
@@ -849,11 +860,12 @@ class Book {
         }
         const fid = this.xfFont[sidx] ?? 0;
         if (value && this.fontStrike[fid]) { struck = struck.concat([value]); value = ""; }
-        if (value || raw) { cells.set(rn*1000 + cn, { value, raw, struck }); if (cn > mc) mc = cn; }
+        if (value || raw) { cells.set(rn*1000 + cn, { value, raw, struck, xf: sidx }); if (cn > mc) mc = cn; }
       }
     }
     return { maxRow, maxCol: mc, hidden,
-      cell: (r,c) => cells.get(r*1000+c) || { value:"", raw:"", struck:[] },
+      cell: (r,c) => cells.get(r*1000+c) || { value:"", raw:"", struck:[], xf:0 },
+      green: (r,c) => { const x = cells.get(r*1000+c); return !!(x && this.fillGreen && this.fillGreen[this.xfFill[x.xf] ?? 0]); },
       val:  (r,c) => (cells.get(r*1000+c) || { value:"" }).value.trim() };
   }
 }
@@ -1054,7 +1066,9 @@ class Roster {
       if (nm && !lvl && !sh.val(r,2)) { group = nm; continue; }
       if (!lvl || !nm) continue;
       const person = { row:r, name:nm, level:lvl.toUpperCase(), group,
-                       hidden: sh.hidden.has(r) };
+                       hidden: sh.hidden.has(r),
+                       nightGreen: sh.green(r,4),
+                       nightRegular: R.NIGHT_REGULARS.some(x => x.toLowerCase() === nm.trim().toLowerCase()) };
       /* 隱藏 = AOC 標記「資料要留著但不要用」。
          還是放進姓名索引,舊班表才認得出這個人是誰;
          但不進可派工名冊,所以不會被排、也不算進任何人數。 */
@@ -1356,12 +1370,13 @@ function evaluate(teams, roster, day, S) {
   const z = roster.zone(day);
   const issues = [];
   const add = (level,kind,msg,fix,where) => issues.push({ level,kind,msg,fix:fix||"",where:where||"" });
-  const excluded = new Set((S.exclude||[]).map(x => x.toLowerCase()));
+  const excluded = new Set((S.exclude||[]).concat(R.NEVER).map(x => x.toLowerCase()));
 
   const avail = new Map();
   for (const p of roster.people) {
     let a = roster.avail(p, day);
-    if (excluded.has(p.name.toLowerCase())) a = { ok:false, cat:"excluded", why:"設定裡排除", code:a.code };
+    if (excluded.has(p.name.toLowerCase())) a = { ok:false, cat:"excluded",
+      why: R.NEVER.some(x => x.toLowerCase() === p.name.toLowerCase()) ? "永不派工" : "設定裡排除", code:a.code };
     avail.set(p.name, a);
   }
   /* [U] 代碼 FMS / HL / F2 = 當天不是為雲林工作的技師,
@@ -1737,7 +1752,7 @@ function buildDraft(plan, roster, target, S, base) {
     : (z === "weather_off"
         ? "這一天總表全員留在岸上(天氣取消),草稿只能當參考。"
         : "這一天總表已經是事後紀錄(OF / ON),不是未來計畫 —— 草稿補不了人,請改選今天或之後的日期。");
-  const excluded = new Set((S.exclude||[]).map(x => x.toLowerCase()));
+  const excluded = new Set((S.exclude||[]).concat(R.NEVER).map(x => x.toLowerCase()));
   const used = new Set();
   const teams = [];
 
@@ -1768,7 +1783,7 @@ function buildDraft(plan, roster, target, S, base) {
 }
 
 function autoFill(teams, roster, target, S, used) {
-  const excluded = new Set((S.exclude||[]).map(x => x.toLowerCase()));
+  const excluded = new Set((S.exclude||[]).concat(R.NEVER).map(x => x.toLowerCase()));
   const order = S.leader_order || [], ot = S.overtime || {};
   const avoid = new Set((S.avoid_pairs||[]).map(p => [...p].sort().join(" ")));
   const pool = roster.people.filter(p =>          // cat "support" 不自動補,要由人自己挑
@@ -2505,7 +2520,7 @@ function slotOptions(team, slotIdx) {
   const where = new Map();
   DRAFT.teams.forEach(t => { if (t !== team) t.slots.forEach(s => s.name && where.set(s.name, t.name)); });
   const avoid = new Set((S.avoid_pairs||[]).map(p => [...p].sort().join(" ")));
-  const excluded = new Set((S.exclude||[]).map(x => x.toLowerCase()));
+  const excluded = new Set((S.exclude||[]).concat(R.NEVER).map(x => x.toLowerCase()));
 
   const fit = [], rest = [], taken = [], support = [], tswa = [];
   for (const p of ROSTER.people) {
@@ -2992,12 +3007,33 @@ function listName(n) {
 function dayTeamsNow() {
   return (DRAFT && DRAFT.target === DAY) ? teamsFromDraft(DRAFT, ROSTER) : teamsFromPlan(PLAN, ROSTER, DAY);
 }
+/* [U] 2026-10-27 Tina:名單要分日班 / 夜班,用 1- 2- 3- 編號、總表上的名字。
+   有出海計畫(或草稿)就照夜班隊分;沒有的日子用總表姓名欄綠色推定,Jacky Hong / Ken Chao 列「要確認」。 */
+function shiftSplit(teams, people) {
+  const has = teams.some(t => t.members.some(m => m.person && !m.struck));
+  const nightSet = new Set(), daySet = new Set();
+  for (const t of teams) for (const m of t.members)
+    if (m.person && !m.struck && !m.outsider) (t.night ? nightSet : daySet).add(m.person.name);
+  const out = { day: [], night: [], unsure: [], fromPlan: has };
+  for (const p of people) {
+    if (has && nightSet.has(p.name)) out.night.push(p);
+    else if (has && daySet.has(p.name)) out.day.push(p);
+    else if (p.nightGreen) out.night.push(p);
+    else if (p.nightRegular && !has) out.unsure.push(p);
+    else out.day.push(p);
+  }
+  out.method = has ? "依出海計畫的夜班隊分(沒排到的人依總表綠色名字推定)"
+                   : "出海計畫沒有這一天,依總表姓名欄綠色(夜班人選)推定";
+  return out;
+}
+function availPeople(ev) {
+  return ROSTER.people.filter(p => { const a = ev.avail.get(p.name) || {};
+    return a.ok && (a.cat === "available" || a.cat === "offshore" ||
+                    (a.cat === "support" && ev.scheduled.has(p.name))); });   // 照總表順序
+}
 function buildList(kind) {
   const teams = dayTeamsNow();
   const ev = evaluate(teams, ROSTER, DAY, S);
-  const okAvail = p => { const a = ev.avail.get(p.name) || {};
-    return a.ok && (a.cat === "available" || a.cat === "offshore" ||
-                    (a.cat === "support" && ev.scheduled.has(p.name))); };
   // 班表已排:照隊伍順序;不算劃掉的、外部支援、隱藏的、不為雲林工作的
   const sched = [], seen = new Set();
   for (const t of teams) {
@@ -3008,16 +3044,23 @@ function buildList(kind) {
       seen.add(m.person.name); sched.push(m.person);
     }
   }
-  const avail = ROSTER.people.filter(okAvail);                 // 照總表順序
+  const avail = availPeople(ev);
   const main = kind === "scheduled" ? sched : avail;
+  /* 「總表可出海」只認出海計畫檔案裡的夜班隊:自動產生的草稿是機器猜的,拿來分日夜班會誤導 */
+  const sp = shiftSplit(kind === "scheduled" ? teams : teamsFromPlan(PLAN, ROSTER, DAY), main);
+  const wd = "日一二三四五六"[new Date(DAY + "T00:00:00Z").getUTCDay()];
   const title = kind === "scheduled"
-    ? `${DAY} 班表已排的技師(${sched.length} 位,照隊伍順序${DRAFT && DRAFT.target === DAY ? ",含畫面上的草稿" : ""})`
-    : `${DAY} 總表可出海的技師(${avail.length} 位,照總表順序)`;
-  const lines = [title, ...main.map((p, i) => `${i + 1}. ${listName(p.name)}`)];
+    ? `${DAY}(${wd}) 班表已排的技師 ${sched.length} 位(照隊伍順序${DRAFT && DRAFT.target === DAY ? ",含畫面上的草稿" : ""})`
+    : `${DAY}(${wd}) 總表可出海的技師 ${avail.length} 位(照總表順序)`;
+  const num = arr => arr.map((p, i) => `${i + 1}- ${listName(p.name)}`);
+  const lines = [title, "", `日班(${sp.day.length} 人)`, ...num(sp.day)];
+  if (sp.night.length) lines.push("", `夜班(${sp.night.length} 人${sp.fromPlan ? "" : ",推定"})`, ...num(sp.night));
+  else lines.push("", "夜班:沒有");
+  if (sp.unsure.length) lines.push("", `日班或夜班要確認(${sp.unsure.length} 人,雲林正職夜班人選):` + sp.unsure.map(p => listName(p.name)).join("、"));
+  lines.push("", `(日夜班:${sp.method})`);
   const schedSet = new Set(sched.map(p => p.name)), availSet = new Set(avail.map(p => p.name));
   const onlyA = avail.filter(p => !schedSet.has(p.name)), onlyS = sched.filter(p => !availSet.has(p.name));
-  if (onlyA.length || onlyS.length) lines.push("");
-  if (onlyA.length) lines.push(`總表可出海、但班表沒排到(${onlyA.length}):` + onlyA.map(p => listName(p.name)).join("、"));
+  if (sp.fromPlan && onlyA.length) lines.push(`總表可出海、但班表沒排到(${onlyA.length}):` + onlyA.map(p => listName(p.name)).join("、"));
   if (onlyS.length) lines.push(`班表有排、但總表當天不是可出海(${onlyS.length}):` +
     onlyS.map(p => `${listName(p.name)}(${(ev.avail.get(p.name)||{}).why || "?"})`).join("、"));
   return lines.join("\n");
@@ -3698,6 +3741,10 @@ const ASK = (() => {
           scheduled_twice: w.dup.map(x => `${x.name}(${x.teams.join("、")})`) },
         issues: ev.issues.map(i => ({ level: { stop: "要處理", warn: "提醒", info: "說明" }[i.level] || i.level, msg: i.msg, fix: i.fix || undefined })),
         teams: teams.map(brief), other_blocks: blocks,
+        roster_offshore: (() => { const sp = shiftSplit(teamsFromPlan(PLAN, ROSTER, date), availPeople(ev));
+          return { note: "總表當天可出海的人(照總表順序、總表上的名字)。使用者要「可以出海的名單」時用這個,分日班 / 夜班,用 1- 2- 3- 編號",
+            shift_method: sp.method, day: sp.day.map(p => listName(p.name)), night: sp.night.map(p => listName(p.name)),
+            unsure_day_or_night: sp.unsure.map(p => listName(p.name)) }; })(),
         draft_on_screen: DRAFTS.has(date) && PLAN.days.has(date) ? teamsFromDraft(DRAFTS.get(date), ROSTER).map(brief) : undefined };
     },
     person_schedule({ name, from, to }) {
@@ -3732,12 +3779,16 @@ const ASK = (() => {
       const ev = evaluate(teams, ROSTER, date, S);
       const lv = (levels || []).map(x => String(x).toUpperCase());
       const night = new Set(); teams.filter(t => t.night).forEach(t => t.members.forEach(m => m.person && night.add(m.person.name)));
+      const sp = shiftSplit(teamsFromPlan(PLAN, ROSTER, date), availPeople(ev)), shiftOf = new Map();
+      sp.day.forEach(p => shiftOf.set(p.name, "日班")); sp.night.forEach(p => shiftOf.set(p.name, "夜班")); sp.unsure.forEach(p => shiftOf.set(p.name, "日夜班要確認"));
       const list = ROSTER.people.filter(p => { const a = ev.avail.get(p.name); return a && a.ok; })
         .filter(p => !lv.length || lv.includes(p.level.toUpperCase()))
         .filter(p => !only_unscheduled || !ev.scheduled.has(p.name))
-        .map(p => ({ name: p.name, level: p.level, group: p.group, code: ROSTER.code(p, date),
+        .map(p => ({ name: listName(p.name), level: p.level, group: p.group, code: ROSTER.code(p, date), shift: shiftOf.get(p.name),
+          night_pool: p.nightGreen || p.nightRegular || undefined,
           scheduled_in: ev.scheduled.has(p.name) ? ev.scheduled.get(p.name).join("、") + (night.has(p.name) ? "(夜班)" : "") : undefined }));
-      return { date, count: list.length, people: list };
+      return { date, count: list.length, shift_method: sp.method, people: list,
+        note: "可出海名單請照總表順序、分日班 / 夜班、用 1- 2- 3- 編號;shift 沒有出海計畫時是推定,要說明" };
     },
     find_people({ query }) {
       needData();
@@ -3842,11 +3893,19 @@ const ASK = (() => {
     d.querySelectorAll("li").forEach(li => li.onclick = () => { $("#askIn").value = li.textContent; $("#askIn").focus(); });
     if (!getCode()) codeForm();
   }
+  /* [U] 2026-10-27:Tina 沒填代碼一直按送出,代碼框就一直疊下去。改成只有一個框、會自動跳過去,
+     填好按 Enter 或「儲存」後,剛剛打的問題直接送出 */
   function codeForm(msg) {
-    const d = add("tip", `${msg ? `<div class="er">${esc(msg)}</div>` : ""}第一次使用要輸入代碼(跟「對話整理」同一組,例如 AOC-XXXXXXXX):
-      <div style="display:flex;gap:6px;margin-top:6px"><input type="password" style="flex:1;padding:4px 7px"><button class="cp" style="margin:0">儲存</button></div>`);
+    log().querySelectorAll(".codeform").forEach(x => x.remove());
+    const d = add("tip codeform", `${msg ? `<div class="er">${esc(msg)}</div>` : ""}<b>第一次使用要先輸入代碼</b>(跟「對話整理」網站登入的是同一組,像 AOC-XXXXXXXX;不知道的話請問管理者):
+      <div style="display:flex;gap:6px;margin-top:6px"><input type="password" placeholder="在這裡輸入代碼" style="flex:1;padding:5px 8px;border:2px solid var(--buoy);border-radius:4px"><button class="cp" style="margin:0">儲存</button></div>`);
     const inp = d.querySelector("input");
-    d.querySelector("button").onclick = () => { const v = inp.value.trim(); if (!v) return; lsSet("ask_code", v); d.innerHTML = "代碼已儲存。"; };
+    const save = () => { const v = inp.value.trim(); if (!v) { inp.focus(); return; }
+      lsSet("ask_code", v); d.classList.remove("codeform"); d.innerHTML = "代碼已儲存。";
+      if ($("#askIn").value.trim() || files.length) send(); else $("#askIn").focus(); };
+    d.querySelector("button").onclick = save;
+    inp.addEventListener("keydown", e => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); save(); } });
+    setTimeout(() => inp.focus(), 0);
   }
 
   async function send() {
