@@ -43,6 +43,11 @@ input:focus-visible,textarea:focus-visible,button:focus-visible{
 .start{max-width:660px;margin:0 auto;padding:56px 22px}
 .start h1{font-size:30px;margin:0 0 10px;letter-spacing:-.01em}
 .start p{color:var(--ink-2);margin:0 0 22px;max-width:56ch}
+.start .quick{margin-top:18px;border:1px solid var(--rule);border-radius:8px;padding:14px 16px;background:var(--surface)}
+.start .quick .sm{font-size:12.5px;color:var(--ink-3);margin:3px 0 8px}
+.start .quick .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.start .quick input[type=date]{padding:6px 8px;border:1px solid var(--rule);border-radius:4px;background:var(--surface);color:var(--ink)}
+.start .quick textarea{margin-top:10px;font-size:12.5px;min-height:320px}
 .drop{border:2px dashed var(--rule);border-radius:6px;background:var(--surface);
   padding:38px 26px;text-align:center;transition:border-color .15s,background .15s}
 .drop.over{border-color:var(--buoy);background:var(--buoy-soft)}
@@ -389,6 +394,12 @@ textarea.big{width:100%;min-height:110px;line-height:1.6}
   </div>
   <div class="progress" id="prog"></div>
   <div class="warnbox hide" id="startwarn"></div>
+  <div id="quickList" class="quick hide">
+    <b>只有總表也可以先列名單</b>
+    <div class="sm">出海計畫還沒拖進來的話,先用總表列出某一天可以出海的人(分日班 / 夜班,夜班依總表綠色名字推定)。</div>
+    <div class="row"><input type="date" id="qlDate"><button class="btn" id="qlBtn">總表可出海的人 1- 2- 3-</button><span id="qlMsg" class="sm"></span></div>
+    <textarea id="qlOut" class="big hide" readonly></textarea>
+  </div>
 </div>
 
 <!-- ================= 主畫面 ================= -->
@@ -1328,7 +1339,7 @@ function linkNames(plan, roster, day) {
 }
 
 function teamsFromPlan(plan, roster, day) {
-  if (!plan.days.has(day)) return [];       // 出海計畫還沒建立這一天
+  if (!plan || !plan.days.has(day)) return [];       // 出海計畫還沒建立這一天
   linkNames(plan, roster, day);
   return plan.days.get(day).teams.map(t => ({
     name:t.name, vessel:t.vessel, worktype:t.worktype, night:t.night, painter:t.painter,
@@ -2134,7 +2145,25 @@ async function handleFiles(files) {
     return;
   }
   if (ROSTER && PLAN) { prog("讀好了,正在開啟…"); setTimeout(startApp, 60); }
-  else prog("還缺一個檔案,再把另一個拖進來就好。");
+  else {
+    prog("還缺一個檔案,再把另一個拖進來就好。");
+    if (ROSTER) showQuickList();
+  }
+}
+/* [U] 2026-10-27:Tina 只有新的總表、沒有出海計畫時,找不到「不用 AI」的名單入口。
+   開場畫面讀好總表就先給一個「某天總表可出海的人」,不用等出海計畫。 */
+function showQuickList() {
+  const box = $("#quickList"); box.classList.remove("hide");
+  const today = new Date().toISOString().slice(0,10), ds = [...ROSTER.dateCol.keys()].sort();
+  if (!$("#qlDate").value) $("#qlDate").value = ROSTER.dateCol.has(today) ? today : ds.find(d => d >= today) || ds[ds.length-1];
+  $("#qlBtn").onclick = async () => {
+    const d = $("#qlDate").value;
+    if (!ROSTER.dateCol.has(d)) { $("#qlMsg").textContent = `總表沒有 ${d} 這一欄(${ds[0]} ~ ${ds[ds.length-1]})`; return; }
+    const txt = availListText(d, [], evaluate([], ROSTER, d, S));
+    const out = $("#qlOut"); out.classList.remove("hide"); out.value = txt;
+    try { await navigator.clipboard.writeText(txt); $("#qlMsg").textContent = "已複製"; }
+    catch (_) { out.focus(); out.select(); $("#qlMsg").textContent = "請按 Ctrl+C 複製"; }
+  };
 }
 
 function startApp() {
@@ -3007,6 +3036,23 @@ function listName(n) {
 function dayTeamsNow() {
   return (DRAFT && DRAFT.target === DAY) ? teamsFromDraft(DRAFT, ROSTER) : teamsFromPlan(PLAN, ROSTER, DAY);
 }
+/* 「總表可出海的人」:照總表順序,分日班 / 夜班。planTeams 只放出海計畫檔案裡的隊伍(沒有就空陣列) */
+function availListText(day, planTeams, ev, sched) {
+  const avail = availPeople(ev), sp = shiftSplit(planTeams, avail);
+  const wd = "日一二三四五六"[new Date(day + "T00:00:00Z").getUTCDay()];
+  const num = arr => arr.map((p, i) => `${i + 1}- ${listName(p.name)}`);
+  const lines = [`${day}(${wd}) 總表可出海的技師 ${avail.length} 位(照總表順序)`, "", `日班(${sp.day.length} 人)`, ...num(sp.day)];
+  if (sp.night.length) lines.push("", `夜班(${sp.night.length} 人${sp.fromPlan ? "" : ",推定"})`, ...num(sp.night));
+  else lines.push("", "夜班:沒有");
+  if (sp.unsure.length) lines.push("", `日班或夜班要確認(${sp.unsure.length} 人,雲林正職夜班人選):` + sp.unsure.map(p => listName(p.name)).join("、"));
+  lines.push("", `(日夜班:${sp.method})`);
+  if (sched && sp.fromPlan) {
+    const ss = new Set(sched.map(p => p.name)), onlyA = avail.filter(p => !ss.has(p.name));
+    if (onlyA.length) lines.push(`總表可出海、但班表沒排到(${onlyA.length}):` + onlyA.map(p => listName(p.name)).join("、"));
+  }
+  if (!["plan"].includes(ev.zone)) lines.push(`(提醒:總表這一天是「${({history:"已發生",weather_off:"天氣取消",missing:"總表沒有這天"})[ev.zone] || ev.zone}」,代碼多半已改成 OF / ON)`);
+  return lines.join("\n");
+}
 /* [U] 2026-10-27 Tina:名單要分日班 / 夜班,用 1- 2- 3- 編號、總表上的名字。
    有出海計畫(或草稿)就照夜班隊分;沒有的日子用總表姓名欄綠色推定,Jacky Hong / Ken Chao 列「要確認」。 */
 function shiftSplit(teams, people) {
@@ -3045,7 +3091,8 @@ function buildList(kind) {
     }
   }
   const avail = availPeople(ev);
-  const main = kind === "scheduled" ? sched : avail;
+  if (kind !== "scheduled") return availListText(DAY, teamsFromPlan(PLAN, ROSTER, DAY), ev, sched);
+  const main = sched;
   /* 「總表可出海」只認出海計畫檔案裡的夜班隊:自動產生的草稿是機器猜的,拿來分日夜班會誤導 */
   const sp = shiftSplit(kind === "scheduled" ? teams : teamsFromPlan(PLAN, ROSTER, DAY), main);
   const wd = "日一二三四五六"[new Date(DAY + "T00:00:00Z").getUTCDay()];
@@ -3705,11 +3752,13 @@ const ASK = (() => {
   const errText = e => (ERRS[e && e.code] || "發生錯誤") + (e && e.message ? `(${e.message})` : "");
 
   /* ---------- 給 AI 的工具(全部在本機算) ---------- */
-  const needData = () => { if (!ROSTER || !PLAN) throw new Error("還沒載入總表與出海計畫,請先把兩個 Excel 拖進來"); };
+  /* 只有總表也能查(可出海名單、某人的代碼);出海計畫沒載入時,隊伍相關的部分回空的並說明 */
+  const needData = () => { if (!ROSTER) throw new Error("還沒載入人力總表。請把總表拖進排班工具,或直接在這裡用 📎 附上總表"); };
+  const hasPlanDay = d => !!(PLAN && PLAN.days.has(d));
   const pname = m => m.person ? m.person.name : m.display;
   function teamsOf(d) {
-    if (DRAFTS.has(d) && !PLAN.days.has(d)) return { teams: teamsFromDraft(DRAFTS.get(d), ROSTER), src: "畫面上的草稿(還沒寫回檔案)" };
-    return { teams: teamsFromPlan(PLAN, ROSTER, d), src: PLAN.days.has(d) ? "出海計畫檔案" : "出海計畫沒有這一天" };
+    if (DRAFTS.has(d) && !hasPlanDay(d)) return { teams: teamsFromDraft(DRAFTS.get(d), ROSTER), src: "畫面上的草稿(工具自動產生或使用者改過,還沒寫回檔案)" };
+    return { teams: teamsFromPlan(PLAN, ROSTER, d), src: !PLAN ? "還沒載入出海計畫" : hasPlanDay(d) ? "出海計畫檔案" : "出海計畫沒有這一天" };
   }
   function brief(t) {
     return { team: t.name, vessel: t.vessel, work: t.worktype || undefined, night: t.night || undefined, painter: t.painter || undefined,
@@ -3730,7 +3779,7 @@ const ASK = (() => {
       needData(); if (!isoOk(date)) throw new Error("日期格式要 YYYY-MM-DD");
       const { teams, src } = teamsOf(date);
       const ev = evaluate(teams, ROSTER, date, S), s = ev.summary, w = s.diffWho;
-      const day = PLAN.days.get(date);
+      const day = PLAN && PLAN.days.get(date);
       const blocks = {};
       if (day) for (const [k, ms] of Object.entries(day.blocks || {})) blocks[k] = ms.map(m => m.display + (m.struck ? "(取消)" : ""));
       return { date, weekday: "星期" + wdz(date), source: src, zone: ev.zone,
@@ -3745,7 +3794,7 @@ const ASK = (() => {
           return { note: "總表當天可出海的人(照總表順序、總表上的名字)。使用者要「可以出海的名單」時用這個,分日班 / 夜班,用 1- 2- 3- 編號",
             shift_method: sp.method, day: sp.day.map(p => listName(p.name)), night: sp.night.map(p => listName(p.name)),
             unsure_day_or_night: sp.unsure.map(p => listName(p.name)) }; })(),
-        draft_on_screen: DRAFTS.has(date) && PLAN.days.has(date) ? teamsFromDraft(DRAFTS.get(date), ROSTER).map(brief) : undefined };
+        draft_on_screen: DRAFTS.has(date) && hasPlanDay(date) ? teamsFromDraft(DRAFTS.get(date), ROSTER).map(brief) : undefined };
     },
     person_schedule({ name, from, to }) {
       needData(); if (!isoOk(from) || !isoOk(to) || from > to) throw new Error("日期區間錯誤");
@@ -3757,11 +3806,11 @@ const ASK = (() => {
       for (let d = from, i = 0; d <= to && i < 62; d = addDays(d, 1), i++) {
         const a = ROSTER.avail(p, d), code = ROSTER.code(p, d) || "";
         const where = [];
-        if (PLAN.days.has(d) || DRAFTS.has(d)) {
+        if (hasPlanDay(d) || DRAFTS.has(d)) {
           for (const t of teamsOf(d).teams) for (const m of t.members)
             if (m.person === p || (!m.person && m.display && ROSTER.find(clean(m.display)) === p))
               where.push(t.name + (t.night ? "(夜班)" : "") + (m.struck ? "(取消)" : ""));
-          const dd = PLAN.days.get(d);
+          const dd = PLAN && PLAN.days.get(d);
           if (dd) for (const [k, ms] of Object.entries(dd.blocks || {}))
             if (ms.some(m => ROSTER.find(m.key) === p)) where.push(k);
         }
@@ -3800,7 +3849,9 @@ const ASK = (() => {
       needData(); if (!isoOk(from) || !isoOk(to) || from > to) throw new Error("日期區間錯誤");
       const out = [];
       for (let d = from, i = 0; d <= to && i < 31; d = addDays(d, 1), i++) {
-        if (!PLAN.days.has(d) && !DRAFTS.has(d)) { out.push(`${d}(${wdz(d)}) 出海計畫沒有這一天`); continue; }
+        if (!hasPlanDay(d) && !DRAFTS.has(d)) {
+          const ev = evaluate([], ROSTER, d, S);
+          out.push(`${d}(${wdz(d)}) 出海計畫沒有這一天・總表可出海 ${availPeople(ev).length}`); continue; }
         const { teams } = teamsOf(d), ev = evaluate(teams, ROSTER, d, S), s = ev.summary;
         const nightN = new Set(teams.filter(t => t.night).flatMap(t => counted(t).map(pname))).size;
         out.push(`${d}(${wdz(d)}) ${ev.zone} 班表已排 ${s.scheduled}・總表可出海 ${s.should}・差額 ${s.diff}・夜班 ${nightN}・要處理 ${s.stop}・提醒 ${s.warn}`);
@@ -3815,13 +3866,13 @@ const ASK = (() => {
   };
   function context() {
     const lines = [`今天:${new Date().toISOString().slice(0, 10)}`];
-    if (ROSTER && PLAN) {
+    if (ROSTER) {
       const rd = [...ROSTER.dateCol.keys()].sort();
-      lines.push($("#n1").textContent.trim(), $("#n2").textContent.trim(),
-        `總表日期:${rd[0]} ~ ${rd[rd.length - 1]};出海計畫日期:${PLAN.dates[0]} ~ ${PLAN.dates[PLAN.dates.length - 1]}`);
+      lines.push($("#n1").textContent.trim(), PLAN ? $("#n2").textContent.trim() : "出海計畫:還沒載入(隊伍、班表查不到,只能用總表)",
+        `總表日期:${rd[0]} ~ ${rd[rd.length - 1]}` + (PLAN ? `;出海計畫日期:${PLAN.dates[0]} ~ ${PLAN.dates[PLAN.dates.length - 1]}` : ""));
       if (DAY) lines.push(`使用者畫面上正在看:${DAY}(星期${wdz(DAY)})`);
       if (DRAFTS.size) lines.push(`畫面上有草稿的日子:${[...DRAFTS.keys()].sort().join("、")}`);
-    } else lines.push("還沒載入 Excel,工具查不到班表;可以先回答一般問題或附件內容。");
+    } else lines.push("還沒載入 Excel,工具查不到班表;可以請使用者用 📎 附上總表(會自動載入),或先回答一般問題、附件內容。");
     return lines.join("\n");
   }
 
@@ -3838,7 +3889,21 @@ const ASK = (() => {
     } finally { URL.revokeObjectURL(url); }
   }
   async function excelBlock(f) {
-    const book = await Book.open(f); await book.prepare();
+    const book = await Book.open(f);
+    /* [U] 2026-10-27:Tina 在對話裡附上總表,但只轉了前幾個分頁(2022、2023)的文字,AI 看不到 2026。
+       附上的是總表或出海計畫,就直接載入排班工具,讓 AI 用工具查 */
+    const isPlan = book.sheetNames.some(n => n.toLowerCase().includes("daily ops"));
+    const isRoster = book.sheetNames.some(n => /^allowance/i.test(n));
+    if (isPlan || isRoster) {
+      const started = !$("#app").classList.contains("hide");
+      if (started && isPlan) return { type: "text", text: `【附件 ${f.name} 是每日出海計畫。排班工具已經載入 ${PLAN_INFO.file},這份沒有換進去(要換請按「全部重來」);請用工具查已載入的資料。】` };
+      if (started) await swapRoster(f); else await handleFiles([f]);
+      const ok = isRoster ? !!ROSTER : !!PLAN;
+      return { type: "text", text: ok
+        ? `【附件 ${f.name} 是${isRoster ? "人力總表" : "每日出海計畫"},已經載入排班工具。請用工具查(day_overview、available_people…),不要看附件文字。】`
+        : `【附件 ${f.name} 看起來是${isRoster ? "人力總表" : "每日出海計畫"},但載入失敗:${$("#startwarn").textContent}】` };
+    }
+    await book.prepare();
     let out = `【附件 Excel:${f.name}】(只轉了文字,沒有顏色;隱藏列已略過)\n`;
     for (const name of book.sheetNames.slice(0, 8)) {
       if (out.length > 120000) { out += `\n(後面的分頁太多,沒有轉)`; break; }
@@ -4031,7 +4096,9 @@ document.body.append(swapInput);
 swapInput.onchange = async () => {
   const f = swapInput.files[0];
   swapInput.value = "";
-  if (!f) return;
+  if (f) await swapRoster(f);
+};
+async function swapRoster(f) {
   const old = ROSTER;
   try {
     const book = await Book.open(f, () => {});
@@ -4075,7 +4142,8 @@ swapInput.onchange = async () => {
     (miss.size ? `<br>不過設定裡有 <b>${miss.size}</b> 位在新總表找不到:` +
       esc([...miss].slice(0,10).join("、")) + `,那幾筆設定會自動失效,建議到設定頁確認一下。` : "");
   $("#wnote").prepend(box);
-};
+  return true;
+}
 $("#swap").onclick = () => swapInput.click();
 
 $("#reload").onclick = () => {
