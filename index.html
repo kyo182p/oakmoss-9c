@@ -3757,8 +3757,12 @@ const ASK = (() => {
   const ERRS = { need_code: "還沒輸入代碼。", bad_code: "代碼不對或已停用(跟「對話整理」用同一組代碼)。",
     network: "連不到後端。如果是在 claude.ai 上開的版本,請改用 GitHub 上的排班網站。", timeout: "AI 回應超過 60 秒,請把問題拆小一點再問。",
     rate_limited: "AI 服務忙碌,稍後再試。", no_credit: "API 額度不足。", too_big: "對話太長或附件太大,請按「新對話」。",
-    bad_action: "後端還沒更新到有「問 AI」的版本(要部署新版 Code.gs)。", not_setup: "後端還沒執行 setup()。" };
-  const errText = e => (ERRS[e && e.code] || "發生錯誤") + (e && e.message ? `(${e.message})` : "");
+    bad_action: "後端還沒更新到有「問 AI」的版本(要部署新版 Code.gs)。", not_setup: "後端還沒執行 setup()。",
+    api_error: "AI 服務這次沒有成功回應。", server_error: "後端暫時出了問題。", no_key: "後端沒有設定 API Key。" };
+  /* [U] 2026-11-06:錯誤訊息直接把英文原文丟給 Tina,看起來像程式當掉。
+     畫面只顯示一句白話,原文收進「技術細節」 */
+  const errText = e => ERRS[e && e.code] || "發生了沒預期的錯誤。";
+  const errDetail = e => [e && e.code, e && e.message].filter(Boolean).join(":") || String(e);
 
   /* ---------- 給 AI 的工具(全部在本機算) ---------- */
   /* 只有總表也能查(可出海名單、某人的代碼);出海計畫沒載入時,隊伍相關的部分回空的並說明 */
@@ -3990,6 +3994,29 @@ const ASK = (() => {
     setTimeout(() => inp.focus(), 0);
   }
 
+  /* 呼叫失敗時自己先補救一次,補救不了才讓使用者看到:
+     · 思考區塊對不上(Invalid signature)→ 把所有思考區塊拿掉再送一次
+     · AI 服務忙碌 → 等 4 秒再送一次 */
+  async function callFixing(data) {
+    try { return await call(data); }
+    catch (e) {
+      if (e && e.code === "api_error" && /thinking|signature/i.test(e.message || "")) {
+        for (const m of msgs) if (m.role === "assistant" && Array.isArray(m.content)) {
+          m.content = m.content.filter(b => b && b.type !== "thinking" && b.type !== "redacted_thinking");
+          if (!m.content.length) m.content = [{ type: "text", text: "(略)" }];
+        }
+        return await call(data);
+      }
+      if (e && (e.code === "rate_limited" || e.code === "server_error")) { await new Promise(r => setTimeout(r, 4000)); return await call(data); }
+      throw e;
+    }
+  }
+  function showError(msg, detail) {
+    const d = add("er", `${esc(msg)}<br><span style="color:var(--ink-2)">問題已經放回輸入框,按「再試一次」或「送出」就會重送;一直失敗的話按上面的「新對話」。</span>` +
+      `<div style="margin-top:6px"><button class="cp" style="margin:0;display:inline-block">再試一次</button></div>` +
+      (detail ? `<details style="margin-top:4px;color:var(--ink-3);font-size:11.5px"><summary style="cursor:pointer">技術細節(給管理者看)</summary><div style="word-break:break-all">${esc(detail)}</div></details>` : ""));
+    d.querySelector("button").onclick = () => { d.remove(); send(); };
+  }
   async function send() {
     if (busy) return;
     const q = $("#askIn").value.trim();
@@ -4016,7 +4043,7 @@ const ASK = (() => {
       let done = false;
       for (let round = 0; round < MAX_ROUNDS && !done; round++) {
         wait.innerHTML = `<span class="spin"></span> ${round ? "整理中…" : "想一下…"}`;
-        const r = await call({ messages: msgs, context: ctx });
+        const r = await callFixing({ messages: msgs, context: ctx });
         msgs.push({ role: "assistant", content: r.content });
         const text = r.content.filter(b => b.type === "text").map(b => b.text).join("\n").trim();
         if (r.stop_reason !== "tool_use") { wait.remove(); answer(text || "(沒有回覆內容)"); done = true;
@@ -4032,11 +4059,13 @@ const ASK = (() => {
         }
         msgs.push({ role: "user", content: results });
       }
-      if (!done) { wait.remove(); msgs.length = snap; add("er", "查了太多次還沒有結論,請把問題拆小一點再問。"); $("#askIn").value = q; }
+      if (!done) { wait.remove(); msgs.length = snap; files = sentFiles; renderFiles(); $("#askIn").value = q;
+        showError("AI 查了很多次資料還沒有結論,請把問題拆小一點再問(例如先問一天、一個人)。"); }
     } catch (e) {
       wait.remove(); msgs.length = snap; files = sentFiles; renderFiles(); $("#askIn").value = q;
       if (e && e.code === "bad_code") { lsSet("ask_code", ""); try { localStorage.removeItem("cd_code"); } catch (_) {} codeForm(errText(e)); }
-      else add("er", esc(e && e.code ? errText(e) : String((e && e.message) || e)) + "(問題已放回輸入框,可以再按送出)");
+      else if (!(e && e.code) && /[\u4e00-\u9fff]/.test(String(e && e.message))) showError(e.message);   // 自己寫的中文說明(例如附件太大)直接顯示
+      else showError(e && e.code ? errText(e) : "讀取附件或整理資料時出了問題。", e && e.code ? errDetail(e) : String((e && e.message) || e));
     } finally { busy = false; $("#askSend").disabled = false; }
   }
 
